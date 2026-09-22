@@ -14,26 +14,50 @@ export default async function RacketProfilePage({ params }: { params: Promise<{ 
   if (!found || found.racket.customerId !== id) notFound();
   const { racket, owner } = found;
 
-  const specItems: SpecListItem[] = [
-    { label: "Head size", value: racket.headSizeSqin ? `${racket.headSizeSqin} sq in` : "—" },
-    { label: "String pattern", value: racket.stringPattern ?? "—" },
+  const actualItems: SpecListItem[] = [
     { label: "Grip size", value: racket.gripSize ?? "—" },
     { label: "Static weight", value: racket.staticWeightG ? `${racket.staticWeightG} g` : "—" },
     { label: "Swingweight", value: racket.swingweight ?? "—" },
     { label: "Balance", value: racket.balanceMm ? `${racket.balanceMm} mm` : "—" },
   ];
 
+  const modelItems: SpecListItem[] = racket.linkedModel
+    ? [
+        { label: "Head size", value: racket.effectiveHeadSizeSqin ? `${racket.effectiveHeadSizeSqin} sq in` : "—" },
+        { label: "String pattern", value: racket.effectiveStringPattern ?? "—" },
+        { label: "Standard weight", value: racket.standardWeightG ? `${racket.standardWeightG} g` : "—" },
+        { label: "Standard balance", value: racket.standardBalanceMm ? `${racket.standardBalanceMm} mm` : "—" },
+        { label: "Length", value: racket.standardLengthIn ? `${racket.standardLengthIn} in` : "—" },
+        {
+          label: "Recommended tension",
+          value: racket.tensionMinLbs || racket.tensionMaxLbs ? `${racket.tensionMinLbs ?? "?"}–${racket.tensionMaxLbs ?? "?"} lbs` : "—",
+        },
+      ]
+    : [
+        { label: "Head size", value: racket.effectiveHeadSizeSqin ? `${racket.effectiveHeadSizeSqin} sq in` : "—" },
+        { label: "String pattern", value: racket.effectiveStringPattern ?? "—" },
+      ];
+
   return (
     <div className="ph-wrap" style={{ maxWidth: 960 }}>
       <div className="profile-head">
         <div>
           <div className="profile-id num">{racket.code}</div>
-          <h2 className="profile-name">{racketLabel(racket)}</h2>
+          <h2 className="profile-name">
+            {racketLabel({ brand: racket.effectiveBrand, series: racket.effectiveSeries, model: racket.effectiveModel, generationYear: racket.effectiveGenerationYear, generationName: racket.effectiveGenerationName })}
+          </h2>
           <div className="row-s" style={{ marginTop: 4 }}>
+            {racket.nickname ? <>{racket.nickname} · </> : null}
             Owner:{" "}
             <Link href={`/customers/${owner.id}`} style={{ color: "var(--court-600)" }}>
               {owner.name}
             </Link>
+            {racket.linkedModel ? (
+              <>
+                {" "}
+                · <Link href={`/catalogue/models/${racket.linkedModel.id}`} style={{ color: "var(--court-600)" }}>View racket model</Link>
+              </>
+            ) : null}
           </div>
         </div>
         <div className="profile-actions">
@@ -51,9 +75,15 @@ export default async function RacketProfilePage({ params }: { params: Promise<{ 
       <div className="profile-grid" style={{ marginTop: 20 }}>
         <Card padding="20px 24px">
           <div className="lab" style={{ marginBottom: 8 }}>
-            Specifications
+            {racket.linkedModel ? "Model specifications" : "Specifications"}
           </div>
-          <SpecList dense items={specItems} />
+          <SpecList dense items={modelItems} />
+
+          <div className="lab" style={{ marginTop: 20, marginBottom: 8 }}>
+            Actual racket
+          </div>
+          <SpecList dense items={actualItems} />
+
           {racket.customisationNotes ? (
             <>
               <div className="lab" style={{ marginTop: 16, marginBottom: 6 }}>

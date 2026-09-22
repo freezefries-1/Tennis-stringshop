@@ -15,6 +15,20 @@
       "when": 1790062330640,
       "tag": "0001_enable_rls",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790065749326,
+      "tag": "0002_cute_devos",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790065756370,
+      "tag": "0003_mute_krista_starr",
+      "breakpoints": true
     }
   ]
 }

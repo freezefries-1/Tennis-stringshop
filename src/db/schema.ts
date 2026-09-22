@@ -53,14 +53,25 @@ export const racketSeries = pgTable("racket_series", {
   archivedAt: timestamp("archived_at", { withTimezone: true }),
 });
 
+// A row is a specific model + generation (e.g. "EZONE 100" 2022 and "EZONE
+// 100" 2025 are two rows sharing series_id + model). Phase 3.
 export const racketModels = pgTable("racket_models", {
   id: id(),
   seriesId: uuid("series_id").notNull().references(() => racketSeries.id),
   model: text("model").notNull(),
+  // Brands describe generations differently — a year, a name, or both.
   generationYear: integer("generation_year"),
+  generationName: text("generation_name"), // "8th Gen", "V9"
   headSizeSqin: numeric("head_size_sqin", { precision: 6, scale: 2 }),
-  stringPattern: text("string_pattern"),
+  // Structured (not "16x19" as one string) so it's usable later for
+  // stringing calculations/analytics, not just display.
+  stringPatternMains: integer("string_pattern_mains"),
+  stringPatternCrosses: integer("string_pattern_crosses"),
   unstrungWeightG: integer("unstrung_weight_g"),
+  standardBalanceMm: integer("standard_balance_mm"),
+  standardLengthIn: numeric("standard_length_in", { precision: 4, scale: 2 }),
+  recommendedTensionMinLbs: numeric("recommended_tension_min_lbs", { precision: 5, scale: 2 }),
+  recommendedTensionMaxLbs: numeric("recommended_tension_max_lbs", { precision: 5, scale: 2 }),
   notes: text("notes"),
   archivedAt: timestamp("archived_at", { withTimezone: true }),
 });
@@ -68,13 +79,21 @@ export const racketModels = pgTable("racket_models", {
 // Two identical frames owned by the same customer are two rows pointing at the
 // same racket_model_id — never merged into one.
 //
-// Phase 2 ships before the master racket database (Phase 3) exists, so a
-// racket is entered manually: brand/series/model/generationYear/headSizeSqin/
-// stringPattern are free text on the row itself, and racketModelId stays
-// null. Once Phase 3's catalogue and dependent dropdowns exist, new rackets
-// can be linked via racketModelId instead — and existing manually-entered
-// rows can be matched up and have racketModelId backfilled onto them without
-// touching or discarding the free-text fields already on the row.
+// Phase 2 shipped before the master racket database (Phase 3) existed, so a
+// racket could only be entered manually: brand/series/model/generationYear/
+// headSizeSqin/stringPattern free text on the row itself, racketModelId null.
+// Phase 3 adds the catalogue (racket_models) and links new rackets via
+// racketModelId instead — brand/series/model/etc. resolve from the joined
+// model (see src/lib/rackets.ts's "effective specs" resolution) rather than
+// these columns once linked. The free-text columns stay for: (a) rackets
+// that are genuinely unknown/manual (no catalogue entry chosen), and
+// (b) not discarding what Phase 2 users already typed in — an existing
+// unlinked racket can have racketModelId backfilled onto it later without
+// touching these columns.
+//
+// stringPattern here is intentionally still free text (unlike
+// racket_models' structured mains/crosses) — it's the manual/fallback path,
+// not the catalogue, so there's nothing to structure it against.
 export const customerRackets = pgTable("customer_rackets", {
   id: id(),
   code: text("code")
@@ -83,14 +102,18 @@ export const customerRackets = pgTable("customer_rackets", {
     .default(sql`'R' || lpad(nextval('racket_code_seq')::text, 4, '0')`), // R0001
   customerId: uuid("customer_id").notNull().references(() => customers.id),
   racketModelId: uuid("racket_model_id").references(() => racketModels.id),
-  // Manual entry (Phase 2), mirrors racket_models' shape 1:1 so Phase 3 can
-  // match/backfill racketModelId against the catalogue.
+  // Manual/fallback entry — used only while racketModelId is null.
   brand: text("brand"),
   series: text("series"),
   model: text("model"),
   generationYear: integer("generation_year"),
   headSizeSqin: numeric("head_size_sqin", { precision: 6, scale: 2 }),
   stringPattern: text("string_pattern"),
+  // Distinguishes identical frames at a glance ("Match racket #1").
+  nickname: text("nickname"),
+  // Actual/measured — always this physical racket's own data, regardless of
+  // whether it's linked to a catalogue model. Overriding these never writes
+  // back to racket_models.
   gripSize: text("grip_size"),
   staticWeightG: integer("static_weight_g"),
   swingweight: integer("swingweight"),

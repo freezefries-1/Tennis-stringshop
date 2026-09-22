@@ -1,10 +1,12 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { Field } from "@/components/ds/field";
 import { Input } from "@/components/ds/input";
 import { Button } from "@/components/ds/button";
+import { RacketModelPicker } from "./racket-model-picker";
+import type { RacketModel } from "./racket-picker-actions";
 import type { RacketFormState } from "@/lib/racket-form-types";
 
 function SubmitButton({ label }: { label: string }) {
@@ -19,14 +21,18 @@ function SubmitButton({ label }: { label: string }) {
 export function RacketForm({
   action,
   initialState,
+  initialModel = null,
   submitLabel,
 }: {
   action: (state: RacketFormState, formData: FormData) => Promise<RacketFormState>;
   initialState: RacketFormState;
+  initialModel?: RacketModel | null;
   submitLabel: string;
 }) {
   const [state, formAction] = useActionState(action, initialState);
   const v = state.values;
+  const [mode, setMode] = useState<"database" | "manual">(v.mode);
+  const [model, setModel] = useState<RacketModel | null>(initialModel);
 
   return (
     <form action={formAction} className="form" style={{ maxWidth: 720 }}>
@@ -36,29 +42,55 @@ export function RacketForm({
         </div>
       ) : null}
 
-      <div className="form-grid">
-        <Field label="Brand" htmlFor="brand">
-          <Input id="brand" name="brand" defaultValue={v.brand} placeholder="Yonex" style={{ width: "100%" }} />
-        </Field>
-        <Field label="Series" htmlFor="series">
-          <Input id="series" name="series" defaultValue={v.series} placeholder="EZONE" style={{ width: "100%" }} />
-        </Field>
+      <input type="hidden" name="mode" value={mode} />
+      <input type="hidden" name="racketModelId" value={model?.id ?? ""} />
+
+      <div className="tabs-lite" role="tablist">
+        <button type="button" className={"tab-lite" + (mode === "database" ? " on" : "")} onClick={() => setMode("database")}>
+          From racket database
+        </button>
+        <button type="button" className={"tab-lite" + (mode === "manual" ? " on" : "")} onClick={() => setMode("manual")}>
+          Manual entry
+        </button>
       </div>
-      <div className="form-grid">
-        <Field label="Model" htmlFor="model">
-          <Input id="model" name="model" defaultValue={v.model} placeholder="100" style={{ width: "100%" }} />
-        </Field>
-        <Field label="Generation / year" htmlFor="generationYear">
-          <Input id="generationYear" name="generationYear" type="number" defaultValue={v.generationYear} placeholder="2025" style={{ width: "100%" }} />
-        </Field>
-      </div>
-      <div className="form-grid">
-        <Field label="Head size (sq in)" htmlFor="headSizeSqin">
-          <Input id="headSizeSqin" name="headSizeSqin" defaultValue={v.headSizeSqin} placeholder="100" style={{ width: "100%" }} />
-        </Field>
-        <Field label="String pattern" htmlFor="stringPattern">
-          <Input id="stringPattern" name="stringPattern" defaultValue={v.stringPattern} placeholder="16 × 19" style={{ width: "100%" }} />
-        </Field>
+
+      {mode === "database" ? (
+        <RacketModelPicker initialModel={model} onModelChange={setModel} />
+      ) : (
+        <>
+          <div className="form-grid">
+            <Field label="Brand" htmlFor="brand">
+              <Input id="brand" name="brand" defaultValue={v.brand} placeholder="Yonex" style={{ width: "100%" }} />
+            </Field>
+            <Field label="Series" htmlFor="series">
+              <Input id="series" name="series" defaultValue={v.series} placeholder="EZONE" style={{ width: "100%" }} />
+            </Field>
+          </div>
+          <div className="form-grid">
+            <Field label="Model" htmlFor="model">
+              <Input id="model" name="model" defaultValue={v.model} placeholder="100" style={{ width: "100%" }} />
+            </Field>
+            <Field label="Generation / year" htmlFor="generationYear">
+              <Input id="generationYear" name="generationYear" type="number" defaultValue={v.generationYear} placeholder="2025" style={{ width: "100%" }} />
+            </Field>
+          </div>
+          <div className="form-grid">
+            <Field label="Head size (sq in)" htmlFor="headSizeSqin">
+              <Input id="headSizeSqin" name="headSizeSqin" defaultValue={v.headSizeSqin} placeholder="100" style={{ width: "100%" }} />
+            </Field>
+            <Field label="String pattern" htmlFor="stringPattern">
+              <Input id="stringPattern" name="stringPattern" defaultValue={v.stringPattern} placeholder="16 × 19" style={{ width: "100%" }} />
+            </Field>
+          </div>
+        </>
+      )}
+
+      <Field label="Nickname" htmlFor="nickname" hint="Optional — helps tell identical rackets apart, e.g. “Match racket #1”.">
+        <Input id="nickname" name="nickname" defaultValue={v.nickname} placeholder="Match racket #1" style={{ width: "100%" }} />
+      </Field>
+
+      <div className="lab" style={{ marginTop: 4 }}>
+        Actual racket
       </div>
       <div className="form-grid">
         <Field label="Grip size" htmlFor="gripSize">

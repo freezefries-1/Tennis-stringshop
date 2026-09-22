@@ -1,0 +1,1 @@
+ALTER TABLE "racket_models" DROP COLUMN "string_pattern";

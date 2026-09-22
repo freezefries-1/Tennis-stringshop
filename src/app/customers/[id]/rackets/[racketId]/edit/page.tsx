@@ -15,6 +15,9 @@ export default async function EditRacketPage({ params }: { params: Promise<{ id:
   const initialState: RacketFormState = {
     status: "idle",
     values: {
+      mode: racket.linkedModel ? "database" : "manual",
+      racketModelId: racket.racketModelId ?? "",
+      nickname: racket.nickname ?? "",
       brand: racket.brand ?? "",
       series: racket.series ?? "",
       model: racket.model ?? "",
@@ -36,7 +39,12 @@ export default async function EditRacketPage({ params }: { params: Promise<{ id:
         {owner.name} · {racket.code}
       </div>
       <h2 className="ph-title">Edit racket</h2>
-      <RacketForm action={updateRacketAction.bind(null, id, racketId)} initialState={initialState} submitLabel="Save changes" />
+      <RacketForm
+        action={updateRacketAction.bind(null, id, racketId)}
+        initialState={initialState}
+        initialModel={racket.linkedModel}
+        submitLabel="Save changes"
+      />
     </div>
   );
 }

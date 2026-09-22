@@ -2,6 +2,11 @@
 // src/app/customers/racket-actions.ts because a "use server" module may only
 // export async functions — a plain object/interface export breaks the build.
 export interface RacketFormValues {
+  // "database" — racketModelId names the chosen catalogue model, the
+  // manual fields below are ignored. "manual" — the reverse.
+  mode: "database" | "manual";
+  racketModelId: string;
+  nickname: string;
   brand: string;
   series: string;
   model: string;
@@ -25,6 +30,9 @@ export interface RacketFormState {
 export const emptyRacketFormState: RacketFormState = {
   status: "idle",
   values: {
+    mode: "database",
+    racketModelId: "",
+    nickname: "",
     brand: "",
     series: "",
     model: "",

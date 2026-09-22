@@ -118,13 +118,7 @@ export const PAGES: Record<string, PageMeta> = {
     title: "Racket database",
     label: "Stock",
     action: "Add model",
-    phase: 3,
-    builds: [
-      "Brand → series → model → generation, all editable in the interface",
-      "Head size, string pattern, unstrung weight per generation",
-      "Dependent searchable selects when adding a customer racket",
-      "Archive, never delete — customer rackets point here",
-    ],
+    actionHref: "/catalogue/models/new",
   },
   expenses: {
     title: "Expenses",

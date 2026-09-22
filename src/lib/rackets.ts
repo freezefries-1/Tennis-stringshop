@@ -1,16 +1,22 @@
-import { and, asc, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db/client";
-import { customerRackets, customers } from "@/db/schema";
+import { customerRackets, customers, racketBrands, racketModels, racketSeries } from "@/db/schema";
+import { formatStringPattern } from "./racket-label";
 
 export { racketLabel } from "./racket-label";
 
 export interface RacketInput {
+  // Set when linked to the master catalogue (Phase 3); null for manual/unknown entry.
+  racketModelId?: string | null;
+  nickname?: string | null;
+  // Manual/fallback fields — only meaningful while racketModelId is null.
   brand?: string | null;
   series?: string | null;
   model?: string | null;
   generationYear?: number | null;
   headSizeSqin?: string | null;
   stringPattern?: string | null;
+  // Actual/measured — always this physical racket's own data.
   gripSize?: string | null;
   staticWeightG?: number | null;
   swingweight?: number | null;
@@ -20,27 +26,104 @@ export interface RacketInput {
 }
 
 export type CustomerRacket = typeof customerRackets.$inferSelect;
+export type RacketModelRow = typeof racketModels.$inferSelect;
 
-export async function listRacketsForCustomer(customerId: string): Promise<CustomerRacket[]> {
-  return db
-    .select()
-    .from(customerRackets)
-    .where(and(sql`${customerRackets.customerId} = ${customerId}`, isNull(customerRackets.archivedAt)))
-    .orderBy(asc(customerRackets.code));
+/** A customer racket plus its display-ready specs — resolved from the
+ * linked master model when racket_model_id is set, or from the racket's own
+ * manual/fallback columns otherwise. Callers (racketLabel, profile pages)
+ * only ever need to read the `effective*` fields, never branch on whether
+ * the racket is linked. `standard*` fields are null unless linked — they're
+ * the manufacturer spec, kept separate from the racket's own measured data
+ * (see schema.ts's comment on customer_rackets for why). */
+export interface RacketWithSpecs extends CustomerRacket {
+  effectiveBrand: string | null;
+  effectiveSeries: string | null;
+  effectiveModel: string | null;
+  effectiveGenerationYear: number | null;
+  effectiveGenerationName: string | null;
+  effectiveHeadSizeSqin: string | null;
+  effectiveStringPattern: string | null;
+  standardWeightG: number | null;
+  standardBalanceMm: number | null;
+  standardLengthIn: string | null;
+  tensionMinLbs: string | null;
+  tensionMaxLbs: string | null;
+  linkedModel: RacketModelRow | null;
 }
 
-export async function getRacket(id: string) {
-  const [row] = await db
-    .select({ racket: customerRackets, owner: customers })
+function withEffectiveSpecs(racket: CustomerRacket, model: RacketModelRow | null, brandName: string | null, seriesName: string | null): RacketWithSpecs {
+  if (model) {
+    return {
+      ...racket,
+      effectiveBrand: brandName,
+      effectiveSeries: seriesName,
+      effectiveModel: model.model,
+      effectiveGenerationYear: model.generationYear,
+      effectiveGenerationName: model.generationName,
+      effectiveHeadSizeSqin: model.headSizeSqin,
+      effectiveStringPattern: formatStringPattern(model.stringPatternMains, model.stringPatternCrosses),
+      standardWeightG: model.unstrungWeightG,
+      standardBalanceMm: model.standardBalanceMm,
+      standardLengthIn: model.standardLengthIn,
+      tensionMinLbs: model.recommendedTensionMinLbs,
+      tensionMaxLbs: model.recommendedTensionMaxLbs,
+      linkedModel: model,
+    };
+  }
+  return {
+    ...racket,
+    effectiveBrand: racket.brand,
+    effectiveSeries: racket.series,
+    effectiveModel: racket.model,
+    effectiveGenerationYear: racket.generationYear,
+    effectiveGenerationName: null,
+    effectiveHeadSizeSqin: racket.headSizeSqin,
+    effectiveStringPattern: racket.stringPattern,
+    standardWeightG: null,
+    standardBalanceMm: null,
+    standardLengthIn: null,
+    tensionMinLbs: null,
+    tensionMaxLbs: null,
+    linkedModel: null,
+  };
+}
+
+const modelJoin = {
+  model: racketModels,
+  brandName: racketBrands.name,
+  seriesName: racketSeries.name,
+};
+
+export async function listRacketsForCustomer(customerId: string): Promise<RacketWithSpecs[]> {
+  const rows = await db
+    .select({ racket: customerRackets, ...modelJoin })
     .from(customerRackets)
-    .innerJoin(customers, sql`${customers.id} = ${customerRackets.customerId}`)
+    .leftJoin(racketModels, eq(racketModels.id, customerRackets.racketModelId))
+    .leftJoin(racketSeries, eq(racketSeries.id, racketModels.seriesId))
+    .leftJoin(racketBrands, eq(racketBrands.id, racketSeries.brandId))
+    .where(and(eq(customerRackets.customerId, customerId), isNull(customerRackets.archivedAt)))
+    .orderBy(asc(customerRackets.code));
+  return rows.map((r) => withEffectiveSpecs(r.racket, r.model, r.brandName, r.seriesName));
+}
+
+export async function getRacket(id: string): Promise<{ racket: RacketWithSpecs; owner: typeof customers.$inferSelect } | null> {
+  const [row] = await db
+    .select({ racket: customerRackets, owner: customers, ...modelJoin })
+    .from(customerRackets)
+    .innerJoin(customers, eq(customers.id, customerRackets.customerId))
+    .leftJoin(racketModels, eq(racketModels.id, customerRackets.racketModelId))
+    .leftJoin(racketSeries, eq(racketSeries.id, racketModels.seriesId))
+    .leftJoin(racketBrands, eq(racketBrands.id, racketSeries.brandId))
     .where(sql`${customerRackets.id} = ${id}`)
     .limit(1);
-  return row ?? null;
+  if (!row) return null;
+  return { racket: withEffectiveSpecs(row.racket, row.model, row.brandName, row.seriesName), owner: row.owner };
 }
 
 function cleanInput(input: RacketInput) {
   return {
+    racketModelId: input.racketModelId ?? null,
+    nickname: input.nickname?.trim() || null,
     brand: input.brand?.trim() || null,
     series: input.series?.trim() || null,
     model: input.model?.trim() || null,

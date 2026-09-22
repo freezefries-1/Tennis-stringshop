@@ -7,7 +7,7 @@ import { Button } from "@/components/ds/button";
 import { Tabs } from "@/components/ds/tabs";
 import { Icon } from "@/components/ds/icon";
 import { racketLabel } from "@/lib/racket-label";
-import type { CustomerRacket } from "@/lib/rackets";
+import type { RacketWithSpecs } from "@/lib/rackets";
 
 const TABS = [
   { value: "rackets", label: "Rackets" },
@@ -28,7 +28,7 @@ function NotBuiltYet({ phase, action, actionHref }: { phase: number; action: str
   );
 }
 
-export function CustomerProfileTabs({ customerId, rackets }: { customerId: string; rackets: CustomerRacket[] }) {
+export function CustomerProfileTabs({ customerId, rackets }: { customerId: string; rackets: RacketWithSpecs[] }) {
   const [tab, setTab] = useState("rackets");
 
   return (
@@ -49,15 +49,24 @@ export function CustomerProfileTabs({ customerId, rackets }: { customerId: strin
             </div>
           ) : (
             <div className="rows">
-              {rackets.map((r) => (
-                <Link key={r.id} href={`/customers/${customerId}/rackets/${r.id}`} className="row">
-                  <div className="row-main">
-                    <div className="row-t">{racketLabel(r)}</div>
-                    <div className="row-s num">{r.code}</div>
-                  </div>
-                  <Icon name="chevron-right" size={16} color="var(--ink-300)" />
-                </Link>
-              ))}
+              {rackets.map((r) => {
+                const specs = [r.effectiveHeadSizeSqin ? `${r.effectiveHeadSizeSqin} sq in` : null, r.effectiveStringPattern].filter(Boolean).join(" · ");
+                return (
+                  <Link key={r.id} href={`/customers/${customerId}/rackets/${r.id}`} className="row">
+                    <div className="row-main">
+                      <div className="row-t">
+                        {racketLabel({ brand: r.effectiveBrand, series: r.effectiveSeries, model: r.effectiveModel, generationYear: r.effectiveGenerationYear, generationName: r.effectiveGenerationName })}
+                      </div>
+                      <div className="row-s num">
+                        {r.code}
+                        {specs ? ` · ${specs}` : ""}
+                        {r.nickname ? ` · ${r.nickname}` : ""}
+                      </div>
+                    </div>
+                    <Icon name="chevron-right" size={16} color="var(--ink-300)" />
+                  </Link>
+                );
+              })}
             </div>
           )
         ) : tab === "stringing" ? (
