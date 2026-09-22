@@ -155,3 +155,14 @@ export async function updateRacket(id: string, input: RacketInput) {
     .returning();
   return row ?? null;
 }
+
+/** Links a racket to a catalogue model without touching anything else on the
+ * row — used to promote a manually-entered racket into the database (see
+ * racket-actions.ts's promoteRacketToModelAction), where the old brand/
+ * series/model text is left in place as a record of what was originally
+ * typed rather than cleared (unlike updateRacket, which nulls those columns
+ * when the edit form's mode is switched to "database"). */
+export async function linkRacketToModel(id: string, racketModelId: string): Promise<CustomerRacket | null> {
+  const [row] = await db.update(customerRackets).set({ racketModelId }).where(eq(customerRackets.id, id)).returning();
+  return row ?? null;
+}

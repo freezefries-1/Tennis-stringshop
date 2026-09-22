@@ -5,6 +5,7 @@ import { Card } from "@/components/ds/card";
 import { Button } from "@/components/ds/button";
 import { IconButton } from "@/components/ds/icon-button";
 import { SpecList, type SpecListItem } from "@/components/ds/spec-list";
+import { PromoteRacketButton } from "@/components/customers/promote-racket-button";
 
 export const dynamic = "force-dynamic";
 
@@ -61,6 +62,7 @@ export default async function RacketProfilePage({ params }: { params: Promise<{ 
           </div>
         </div>
         <div className="profile-actions">
+          {!racket.linkedModel ? <PromoteRacketButton customerId={id} racketId={racketId} /> : null}
           <Link href="/jobs">
             <Button size="sm" variant="secondary">
               New string job
