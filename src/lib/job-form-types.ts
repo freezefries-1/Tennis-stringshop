@@ -67,7 +67,10 @@ export function emptyJobFormValues(receivedOn: string): JobFormValues {
     stringingNotes: "",
     main: { ...emptyStringLine },
     cross: { ...emptyStringLine },
-    services: [{ serviceName: "Stringing labour", quantity: "1", unitPrice: "", notes: "" }],
+    services: [
+      { serviceName: "String cost", quantity: "1", unitPrice: "", notes: "" },
+      { serviceName: "Stringing labour", quantity: "1", unitPrice: "", notes: "" },
+    ],
   };
 }
 
@@ -75,7 +78,10 @@ export function emptyJobFormState(receivedOn: string): JobFormState {
   return { status: "idle", values: emptyJobFormValues(receivedOn) };
 }
 
-export const COMMON_SERVICES = ["Stringing labour", "Grip replacement", "Overgrip", "Racket customisation", "Grommet service"];
+// Quantity supports halves (e.g. two "String cost · 0.5" lines for a
+// hybrid job strung from one set split across main/cross) — see the
+// Quantity input's step in services-editor.tsx.
+export const COMMON_SERVICES = ["String cost", "Stringing labour", "Grip replacement", "Overgrip", "Racket customisation", "Grommet service"];
 
 // Only a structural shape, not the real jobs.ts type — avoids importing the
 // DB-touching module into this plain-types file (Client Components import
