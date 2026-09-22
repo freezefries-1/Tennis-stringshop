@@ -174,57 +174,65 @@ export function ModelForm({
         </div>
       ) : null}
 
-      <div className="form-grid">
-        <Field label="Model" required htmlFor="model">
-          <Input id="model" name="model" defaultValue={v.model} placeholder="100" required style={{ width: "100%" }} />
-        </Field>
-        <Field label="Release year" htmlFor="generationYear">
-          <Input id="generationYear" name="generationYear" type="number" defaultValue={v.generationYear} placeholder="2025" style={{ width: "100%" }} />
-        </Field>
-      </div>
-      <div className="form-grid">
-        <Field label="Generation name" htmlFor="generationName" hint="e.g. 8th Gen, V9">
-          <Input id="generationName" name="generationName" defaultValue={v.generationName} style={{ width: "100%" }} />
-        </Field>
-        <Field label="Head size (sq in)" htmlFor="headSizeSqin">
-          <Input id="headSizeSqin" name="headSizeSqin" defaultValue={v.headSizeSqin} placeholder="100" style={{ width: "100%" }} />
-        </Field>
-      </div>
-      <div className="form-grid">
-        <Field label="String pattern — mains" htmlFor="stringPatternMains">
-          <Input id="stringPatternMains" name="stringPatternMains" type="number" defaultValue={v.stringPatternMains} placeholder="16" style={{ width: "100%" }} />
-        </Field>
-        <Field label="String pattern — crosses" htmlFor="stringPatternCrosses">
-          <Input id="stringPatternCrosses" name="stringPatternCrosses" type="number" defaultValue={v.stringPatternCrosses} placeholder="19" style={{ width: "100%" }} />
-        </Field>
-      </div>
-      <div className="form-grid">
-        <Field label="Standard weight (g)" htmlFor="unstrungWeightG">
-          <Input id="unstrungWeightG" name="unstrungWeightG" type="number" defaultValue={v.unstrungWeightG} placeholder="300" style={{ width: "100%" }} />
-        </Field>
-        <Field label="Standard balance (mm)" htmlFor="standardBalanceMm">
-          <Input id="standardBalanceMm" name="standardBalanceMm" type="number" defaultValue={v.standardBalanceMm} placeholder="320" style={{ width: "100%" }} />
-        </Field>
-      </div>
-      <div className="form-grid">
-        <Field label="Length (in)" htmlFor="standardLengthIn">
-          <Input id="standardLengthIn" name="standardLengthIn" defaultValue={v.standardLengthIn} placeholder="27" style={{ width: "100%" }} />
-        </Field>
-        <Field label="Recommended tension (lbs)" htmlFor="recommendedTensionMinLbs">
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <Input id="recommendedTensionMinLbs" name="recommendedTensionMinLbs" defaultValue={v.recommendedTensionMinLbs} placeholder="48" style={{ width: "100%" }} />
-            <span className="num" style={{ color: "var(--ink-400)" }}>–</span>
-            <Input name="recommendedTensionMaxLbs" defaultValue={v.recommendedTensionMaxLbs} placeholder="58" style={{ width: "100%" }} />
+      {selectedSeries ? (
+        <>
+          <div className="form-grid">
+            <Field label="Model" required htmlFor="model">
+              <Input id="model" name="model" defaultValue={v.model} placeholder="100" required style={{ width: "100%" }} />
+            </Field>
+            <Field label="Release year" htmlFor="generationYear">
+              <Input id="generationYear" name="generationYear" type="number" defaultValue={v.generationYear} placeholder="2025" style={{ width: "100%" }} />
+            </Field>
           </div>
-        </Field>
-      </div>
-      <Field label="Notes" htmlFor="notes">
-        <textarea id="notes" name="notes" defaultValue={v.notes} />
-      </Field>
+          <div className="form-grid">
+            <Field label="Generation name" htmlFor="generationName" hint="e.g. 8th Gen, V9">
+              <Input id="generationName" name="generationName" defaultValue={v.generationName} style={{ width: "100%" }} />
+            </Field>
+            <Field label="Head size (sq in)" htmlFor="headSizeSqin">
+              <Input id="headSizeSqin" name="headSizeSqin" defaultValue={v.headSizeSqin} placeholder="100" style={{ width: "100%" }} />
+            </Field>
+          </div>
+          <div className="form-grid">
+            <Field label="String pattern — mains" htmlFor="stringPatternMains">
+              <Input id="stringPatternMains" name="stringPatternMains" type="number" defaultValue={v.stringPatternMains} placeholder="16" style={{ width: "100%" }} />
+            </Field>
+            <Field label="String pattern — crosses" htmlFor="stringPatternCrosses">
+              <Input id="stringPatternCrosses" name="stringPatternCrosses" type="number" defaultValue={v.stringPatternCrosses} placeholder="19" style={{ width: "100%" }} />
+            </Field>
+          </div>
+          <div className="form-grid">
+            <Field label="Standard weight (g)" htmlFor="unstrungWeightG">
+              <Input id="unstrungWeightG" name="unstrungWeightG" type="number" defaultValue={v.unstrungWeightG} placeholder="300" style={{ width: "100%" }} />
+            </Field>
+            <Field label="Standard balance (mm)" htmlFor="standardBalanceMm">
+              <Input id="standardBalanceMm" name="standardBalanceMm" type="number" defaultValue={v.standardBalanceMm} placeholder="320" style={{ width: "100%" }} />
+            </Field>
+          </div>
+          <div className="form-grid">
+            <Field label="Length (in)" htmlFor="standardLengthIn">
+              <Input id="standardLengthIn" name="standardLengthIn" defaultValue={v.standardLengthIn} placeholder="27" style={{ width: "100%" }} />
+            </Field>
+            <Field label="Recommended tension (lbs)" htmlFor="recommendedTensionMinLbs">
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <Input id="recommendedTensionMinLbs" name="recommendedTensionMinLbs" defaultValue={v.recommendedTensionMinLbs} placeholder="48" style={{ width: "100%" }} />
+                <span className="num" style={{ color: "var(--ink-400)" }}>–</span>
+                <Input name="recommendedTensionMaxLbs" defaultValue={v.recommendedTensionMaxLbs} placeholder="58" style={{ width: "100%" }} />
+              </div>
+            </Field>
+          </div>
+          <Field label="Notes" htmlFor="notes">
+            <textarea id="notes" name="notes" defaultValue={v.notes} />
+          </Field>
 
-      <div className="form-actions">
-        <SubmitButton label={submitLabel} />
-      </div>
+          <div className="form-actions">
+            <SubmitButton label={submitLabel} />
+          </div>
+        </>
+      ) : (
+        <div className="row-s" style={{ marginTop: 4 }}>
+          Select a brand and series above to continue.
+        </div>
+      )}
     </form>
   );
 }
