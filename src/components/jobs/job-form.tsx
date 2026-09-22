@@ -65,6 +65,7 @@ function PreviousSetupCard({ setup, onRepeat }: { setup: PreviousJobSetup; onRep
 
 export function JobForm({
   mode,
+  jobId,
   action,
   initialState,
   customers,
@@ -73,6 +74,13 @@ export function JobForm({
   submitLabel,
 }: {
   mode: "create" | "edit";
+  /** The job currently being edited — excluded from the "previous setup"
+   * lookup below, otherwise editing a job whose racket has no OTHER jobs
+   * yet fetches the job's own current values as its "previous setup",
+   * making "Repeat previous setup" a silent no-op (it just re-copies the
+   * job onto itself, so nothing visibly changes). Omitted in create mode,
+   * where there's no current job to exclude. */
+  jobId?: string;
   action: (state: JobFormState, formData: FormData) => Promise<JobFormState>;
   initialState: JobFormState;
   customers: PickerCustomer[];
@@ -93,7 +101,7 @@ export function JobForm({
   useEffect(() => {
     if (!racket) return;
     let cancelled = false;
-    fetchPreviousSetup(racket.id).then((setup) => {
+    fetchPreviousSetup(racket.id, jobId).then((setup) => {
       if (!cancelled) {
         setPreviousSetup(setup);
         setLoadingPrevious(false);
@@ -102,7 +110,7 @@ export function JobForm({
     return () => {
       cancelled = true;
     };
-  }, [racket]);
+  }, [racket, jobId]);
 
   const subtotalCents = useMemo(() => values.services.reduce((sum, s) => sum + lineTotalCents(s), 0), [values.services]);
   const discountCents = Math.round((Number.parseFloat(values.discount) || 0) * 100);

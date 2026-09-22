@@ -46,6 +46,7 @@ export default async function EditJobPage({ params }: { params: Promise<{ id: st
       <div style={{ marginTop: 16 }}>
         <JobForm
           mode="edit"
+          jobId={id}
           action={updateJobAction.bind(null, id)}
           initialState={initialState}
           customers={[]}
