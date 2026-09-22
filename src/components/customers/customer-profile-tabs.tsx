@@ -11,7 +11,7 @@ import { racketLabel } from "@/lib/racket-label";
 import type { RacketWithSpecs } from "@/lib/rackets";
 import type { JobHistoryRow } from "@/lib/jobs";
 import { formatCents, formatDate } from "@/lib/format";
-import { JOB_STATUS_LABEL, JOB_STATUS_TONE } from "@/components/jobs/job-status";
+import { JOB_STATUS_LABEL, JOB_STATUS_TONE, PAYMENT_STATUS_LABEL, PAYMENT_STATUS_TONE } from "@/components/jobs/job-status";
 
 const TABS = [
   { value: "rackets", label: "Rackets" },
@@ -115,9 +115,12 @@ export function CustomerProfileTabs({ customerId, rackets: allRackets, jobs }: {
                   </div>
                   <div className="row-end">
                     <span className="row-s num">{formatCents(j.finalPriceCents)}</span>
-                    <Badge tone={JOB_STATUS_TONE[j.status]} dot>
-                      {JOB_STATUS_LABEL[j.status]}
-                    </Badge>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <Badge tone={PAYMENT_STATUS_TONE[j.paymentStatus]}>{PAYMENT_STATUS_LABEL[j.paymentStatus]}</Badge>
+                      <Badge tone={JOB_STATUS_TONE[j.status]} dot>
+                        {JOB_STATUS_LABEL[j.status]}
+                      </Badge>
+                    </div>
                   </div>
                 </Link>
               ))}

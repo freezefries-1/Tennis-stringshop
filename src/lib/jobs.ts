@@ -352,6 +352,7 @@ export interface JobHistoryRow {
   tensionUnit: "kg" | "lb";
   numberOfKnots: number | null;
   status: JobStatus;
+  paymentStatus: JobPaymentStatus;
   finalPriceCents: number;
 }
 
@@ -372,6 +373,7 @@ function toHistoryRows(jobs: StringJob[], stringsMap: Map<string, StringJobStrin
       tensionUnit: main?.tensionUnit ?? cross?.tensionUnit ?? "lb",
       numberOfKnots: job.numberOfKnots,
       status: job.status,
+      paymentStatus: job.paymentStatus,
       finalPriceCents: job.finalPriceCents,
     };
   });
