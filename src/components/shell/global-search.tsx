@@ -56,8 +56,16 @@ export function GlobalSearch() {
     if (!query) return;
     let active = true;
     const t = setTimeout(async () => {
-      const hits = await searchCustomers(query);
-      if (active) setCustomerHits(hits);
+      try {
+        const hits = await searchCustomers(query);
+        if (active) setCustomerHits(hits);
+      } catch (err) {
+        // A failed search shouldn't crash the panel — seed-data groups
+        // (Rackets, String jobs, …) still render below. Logged so a real
+        // failure (vs. an empty result) is visible in the console instead
+        // of looking identical to "no customers matched".
+        if (active) console.error("Customer search failed:", err);
+      }
     }, 150);
     return () => {
       active = false;
