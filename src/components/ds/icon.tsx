@@ -26,6 +26,7 @@ import {
   Mail,
   Phone,
   Trash2,
+  Home,
   type LucideIcon,
 } from "lucide-react";
 
@@ -57,6 +58,7 @@ const ICONS: Record<string, LucideIcon> = {
   phone: Phone,
   "arrow-right": ArrowRight,
   trash: Trash2,
+  home: Home,
 };
 
 export interface IconProps {
