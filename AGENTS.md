@@ -75,7 +75,16 @@ currency. Full brief, phase plan and the reasoning behind the schema live in
   sandbox's network policy blocks outbound Postgres ports, 5432/6543, so
   `npm run db:push` can't reach Supabase from here — only 80/443 are open).
   If a future session *can* reach the database directly, `db:push` works
-  the normal way.
+  the normal way. `0001_enable_rls.sql` is a custom migration (`drizzle-kit
+  generate --custom`), not schema-derived — it `ALTER TABLE ... ENABLE ROW
+  LEVEL SECURITY` on every table, no policies. This app always connects as
+  the Postgres superuser (`src/db/client.ts`), which bypasses RLS
+  unconditionally, so this has zero effect on any query the app makes — its
+  only purpose is closing Supabase's public PostgREST API (exposed by
+  default for every table to anyone with the project's `anon` key, which
+  this app never uses but which still exists). **New tables need the same
+  treatment** — add an `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` line to
+  whatever migration creates them.
 - `_ds/` — the full design-system bundle as exported (guidelines, unported
   components, the two reference UI kits). Consult it before inventing a new
   component.
