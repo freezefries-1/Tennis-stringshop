@@ -6,6 +6,7 @@ import { Card } from "@/components/ds/card";
 import { Button } from "@/components/ds/button";
 import { SpecList, type SpecListItem } from "@/components/ds/spec-list";
 import { ArchiveModelButton } from "@/components/catalogue/archive-model-button";
+import { DeleteModelButton } from "@/components/catalogue/delete-model-button";
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +45,7 @@ export default async function ModelDetailPage({ params }: { params: Promise<{ id
             </Button>
           </Link>
           <ArchiveModelButton modelId={id} archived={!!model.archivedAt} />
+          <DeleteModelButton modelId={id} />
         </div>
       </div>
 

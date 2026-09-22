@@ -7,6 +7,7 @@ import { IconButton } from "@/components/ds/icon-button";
 import { SpecList, type SpecListItem } from "@/components/ds/spec-list";
 import { PromoteRacketButton } from "@/components/customers/promote-racket-button";
 import { ArchiveRacketButton } from "@/components/customers/archive-racket-button";
+import { DeleteRacketButton } from "@/components/customers/delete-racket-button";
 
 export const dynamic = "force-dynamic";
 
@@ -78,6 +79,7 @@ export default async function RacketProfilePage({ params }: { params: Promise<{ 
             <IconButton icon="pencil" label="Edit racket" variant="outline" size="sm" />
           </Link>
           <ArchiveRacketButton customerId={id} racketId={racketId} archived={!!racket.archivedAt} />
+          <DeleteRacketButton customerId={id} racketId={racketId} />
         </div>
       </div>
 

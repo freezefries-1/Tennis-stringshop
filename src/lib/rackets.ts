@@ -179,3 +179,25 @@ export async function setRacketArchived(id: string, archived: boolean): Promise<
     .returning();
   return row ?? null;
 }
+
+const FOREIGN_KEY_VIOLATION = "23503";
+
+function isForeignKeyViolation(err: unknown): boolean {
+  return typeof err === "object" && err !== null && "code" in err && (err as { code?: unknown }).code === FOREIGN_KEY_VIOLATION;
+}
+
+/** True, permanent deletion — unlike everything else in this file, which
+ * archives. Only offered in the UI for correcting a mistaken entry, not as a
+ * general-purpose remove. Nothing currently references a customer racket by
+ * foreign key, but Phase 4's string_jobs table will (customer_racket_id,
+ * not null) — if that ever exists for this racket, the delete is rejected by
+ * Postgres rather than silently taking string job history down with it. */
+export async function deleteRacket(id: string): Promise<"deleted" | "in_use"> {
+  try {
+    await db.delete(customerRackets).where(eq(customerRackets.id, id));
+    return "deleted";
+  } catch (err) {
+    if (isForeignKeyViolation(err)) return "in_use";
+    throw err;
+  }
+}

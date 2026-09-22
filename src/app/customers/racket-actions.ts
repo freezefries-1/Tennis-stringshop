@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { createRacket, getRacket, linkRacketToModel, setRacketArchived, updateRacket, type RacketInput } from "@/lib/rackets";
+import { createRacket, deleteRacket, getRacket, linkRacketToModel, setRacketArchived, updateRacket, type RacketInput } from "@/lib/rackets";
 import { createModel, findDuplicateModel, racketLabelParts, type RacketModelInput } from "@/lib/racket-catalogue";
 import { quickCreateBrand, quickCreateSeries } from "@/components/customers/racket-picker-actions";
 import { racketLabel } from "@/lib/racket-label";
@@ -175,4 +175,20 @@ export async function archiveRacketAction(customerId: string, racketId: string, 
   await setRacketArchived(racketId, archived);
   revalidatePath(`/customers/${customerId}`);
   revalidatePath(`/customers/${customerId}/rackets/${racketId}`);
+}
+
+// -- permanently deleting a customer racket (mistaken entries only) --------
+
+export interface DeleteRacketResult {
+  status: "deleted" | "in_use" | "error";
+  message?: string;
+}
+
+export async function deleteRacketAction(customerId: string, racketId: string): Promise<DeleteRacketResult> {
+  const result = await deleteRacket(racketId);
+  if (result === "in_use") {
+    return { status: "in_use", message: "This racket has related records and can't be deleted — archive it instead." };
+  }
+  revalidatePath(`/customers/${customerId}`);
+  return { status: "deleted" };
 }

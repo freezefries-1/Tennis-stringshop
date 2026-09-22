@@ -145,6 +145,8 @@ a.nav-i:hover,a.mnav-i:hover,a.sheet-i:hover,a.row:hover{color:var(--ink-700);bo
 .form textarea:focus{outline:none;border-color:var(--court-500);box-shadow:0 0 0 3px rgba(21,107,82,0.12)}
 .form-warning{display:flex;flex-direction:column;gap:10px;padding:14px 16px;border-radius:var(--radius-md);background:var(--signal-warning-bg);border:1px solid #EEDCAE}
 .form-warning p{font-size:13.5px;color:var(--ink-800);line-height:1.5}
+.form-danger{display:flex;flex-direction:column;gap:10px;padding:14px 16px;border-radius:var(--radius-md);background:var(--signal-danger-bg);border:1px solid #EACAC6}
+.form-danger p{font-size:13.5px;color:var(--ink-800);line-height:1.5}
 @media(max-width:560px){.form-grid{grid-template-columns:1fr}}
 
 /* lightweight mode toggle (racket form: database vs manual entry) */

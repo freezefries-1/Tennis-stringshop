@@ -3,9 +3,11 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import {
+  countAllCustomerRacketsForModel,
   createBrand,
   createModel,
   createSeries,
+  deleteModel,
   findDuplicateModel,
   racketLabelParts,
   renameBrand,
@@ -107,6 +109,26 @@ export async function archiveModelAction(modelId: string, archived: boolean) {
   await setModelArchived(modelId, archived);
   revalidatePath("/catalogue");
   revalidatePath(`/catalogue/models/${modelId}`);
+}
+
+// -- permanently deleting a model (mistaken entries only) -------------------
+
+export interface DeleteModelResult {
+  status: "deleted" | "in_use" | "error";
+  message?: string;
+}
+
+export async function deleteModelAction(modelId: string): Promise<DeleteModelResult> {
+  const usedBy = await countAllCustomerRacketsForModel(modelId);
+  if (usedBy > 0) {
+    return { status: "in_use", message: `${usedBy} customer racket${usedBy === 1 ? " is" : "s are"} linked to this model — archive it instead, or unlink ${usedBy === 1 ? "that racket" : "those rackets"} first.` };
+  }
+  const result = await deleteModel(modelId);
+  if (result === "in_use") {
+    return { status: "in_use", message: "This model is still referenced elsewhere and can't be deleted — archive it instead." };
+  }
+  revalidatePath("/catalogue");
+  return { status: "deleted" };
 }
 
 // -- brand / series management (src/app/catalogue/brands/page.tsx) --------

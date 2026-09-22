@@ -178,6 +178,41 @@ export async function setModelArchived(id: string, archived: boolean): Promise<v
     .where(eq(racketModels.id, id));
 }
 
+const FOREIGN_KEY_VIOLATION = "23503";
+
+function isForeignKeyViolation(err: unknown): boolean {
+  return typeof err === "object" && err !== null && "code" in err && (err as { code?: unknown }).code === FOREIGN_KEY_VIOLATION;
+}
+
+/** True, permanent deletion — unlike setModelArchived. Only offered in the
+ * UI for correcting a mistaken entry (a typo'd duplicate, say), not a
+ * general-purpose remove — archiving is still the default for a real model
+ * nobody wants selectable anymore. Postgres rejects this if any customer
+ * racket (active or archived) still references the model via racket_model_id,
+ * which the archived-usage check below also reports up front so the caller
+ * can show a clear message instead of a raw DB error. */
+export async function deleteModel(id: string): Promise<"deleted" | "in_use"> {
+  try {
+    await db.delete(racketModels).where(eq(racketModels.id, id));
+    return "deleted";
+  } catch (err) {
+    if (isForeignKeyViolation(err)) return "in_use";
+    throw err;
+  }
+}
+
+/** Unlike countCustomerRacketsForModel (which only counts active rackets,
+ * for the model detail page's "in use" figure), this includes archived
+ * rackets too — any of them still holds a racket_model_id foreign key that
+ * would block deleteModel, so the delete confirmation needs the true total. */
+export async function countAllCustomerRacketsForModel(modelId: string): Promise<number> {
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(customerRackets)
+    .where(eq(customerRackets.racketModelId, modelId));
+  return row?.count ?? 0;
+}
+
 export async function getModelWithNames(id: string): Promise<RacketModelWithNames | null> {
   const [row] = await db
     .select({

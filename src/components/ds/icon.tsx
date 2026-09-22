@@ -25,6 +25,7 @@ import {
   ChevronRight,
   Mail,
   Phone,
+  Trash2,
   type LucideIcon,
 } from "lucide-react";
 
@@ -55,6 +56,7 @@ const ICONS: Record<string, LucideIcon> = {
   mail: Mail,
   phone: Phone,
   "arrow-right": ArrowRight,
+  trash: Trash2,
 };
 
 export interface IconProps {
