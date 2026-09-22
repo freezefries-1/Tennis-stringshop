@@ -8,7 +8,7 @@ import { Badge } from "@/components/ds/badge";
 import { Button } from "@/components/ds/button";
 import type { JobListRow, JobStats } from "@/lib/jobs";
 import { formatCents, formatDate } from "@/lib/format";
-import { JOB_STATUSES, JOB_STATUS_LABEL, JOB_STATUS_TONE } from "./job-status";
+import { JOB_STATUSES, JOB_STATUS_LABEL, JOB_STATUS_TONE, PAYMENT_STATUS_LABEL, PAYMENT_STATUS_TONE } from "./job-status";
 
 function normalize(s: string) {
   return s.trim().toLowerCase();
@@ -29,6 +29,14 @@ function isOverdue(dueOn: string | null, status: JobListRow["status"]): boolean 
   return new Date(dueOn) < new Date(new Date().toDateString());
 }
 
+/** Nothing left to do — collected and paid in full. Kept out of the
+ * default list view so a long-running shop's job list doesn't just grow
+ * forever, but a collected job that's still unpaid/partially paid stays
+ * visible on purpose, so it's not forgotten and never chased. */
+function isDone(j: JobListRow): boolean {
+  return j.status === "collected" && j.paymentStatus === "paid";
+}
+
 export function JobsView({ jobs, stats }: { jobs: JobListRow[]; stats: JobStats }) {
   const router = useRouter();
   const [q, setQ] = useState("");
@@ -36,11 +44,19 @@ export function JobsView({ jobs, stats }: { jobs: JobListRow[]; stats: JobStats 
   const [paymentStatus, setPaymentStatus] = useState<string>("");
   const [due, setDue] = useState<DueFilter>("");
   const [sort, setSort] = useState<SortKey>("receivedOn");
+  const [showDone, setShowDone] = useState(false);
+
+  const doneCount = useMemo(() => jobs.filter(isDone).length, [jobs]);
+  // Searching or explicitly asking for Collected/Paid always reveals done
+  // jobs too — the hide is only a default-view declutter, never a place
+  // data actually goes missing.
+  const revealDone = showDone || q.trim() !== "" || status === "collected" || paymentStatus === "paid";
 
   const filtered = useMemo(() => {
     const s = normalize(q);
     const digits = digitsOnly(q);
     let rows = jobs.filter((j) => {
+      if (!revealDone && isDone(j)) return false;
       if (status && j.status !== status) return false;
       if (paymentStatus && j.paymentStatus !== paymentStatus) return false;
       if (due === "today") {
@@ -69,7 +85,7 @@ export function JobsView({ jobs, stats }: { jobs: JobListRow[]; stats: JobStats 
       }
     });
     return rows;
-  }, [jobs, q, status, paymentStatus, due, sort]);
+  }, [jobs, q, status, paymentStatus, due, sort, revealDone]);
 
   const goTo = (id: string) => router.push(`/jobs/${id}`);
 
@@ -130,6 +146,13 @@ export function JobsView({ jobs, stats }: { jobs: JobListRow[]; stats: JobStats 
         </select>
       </div>
 
+      {doneCount > 0 ? (
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13.5, color: "var(--ink-600)" }}>
+          <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} />
+          Show completed &amp; paid ({doneCount})
+        </label>
+      ) : null}
+
       {filtered.length === 0 ? (
         <Card>
           <div className="rec-empty">{jobs.length === 0 ? "No string jobs yet. Create the first one to get started." : `No match for the current search/filters.`}</div>
@@ -149,6 +172,7 @@ export function JobsView({ jobs, stats }: { jobs: JobListRow[]; stats: JobStats 
                     <th>Received</th>
                     <th>Due</th>
                     <th>Status</th>
+                    <th>Payment</th>
                     <th className="num">Price</th>
                   </tr>
                 </thead>
@@ -167,6 +191,11 @@ export function JobsView({ jobs, stats }: { jobs: JobListRow[]; stats: JobStats 
                       <td>
                         <Badge tone={JOB_STATUS_TONE[j.status]} dot>
                           {JOB_STATUS_LABEL[j.status]}
+                        </Badge>
+                      </td>
+                      <td>
+                        <Badge tone={PAYMENT_STATUS_TONE[j.paymentStatus]} dot>
+                          {PAYMENT_STATUS_LABEL[j.paymentStatus]}
                         </Badge>
                       </td>
                       <td className="num">{formatCents(j.finalPriceCents)}</td>
@@ -204,6 +233,12 @@ export function JobsView({ jobs, stats }: { jobs: JobListRow[]; stats: JobStats 
                   <div className="ccard-stat">
                     <span className="lab">Price</span>
                     <span className="num">{formatCents(j.finalPriceCents)}</span>
+                  </div>
+                  <div className="ccard-stat">
+                    <span className="lab">Payment</span>
+                    <Badge tone={PAYMENT_STATUS_TONE[j.paymentStatus]} dot>
+                      {PAYMENT_STATUS_LABEL[j.paymentStatus]}
+                    </Badge>
                   </div>
                   <div className="ccard-stat">
                     <span className="lab">Status</span>
