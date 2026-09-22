@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { customerRackets, customers, racketBrands, racketModels, racketSeries } from "@/db/schema";
+import { isForeignKeyViolation } from "./db-errors";
 
 export type RacketBrand = typeof racketBrands.$inferSelect;
 export type RacketSeries = typeof racketSeries.$inferSelect;
@@ -178,11 +179,6 @@ export async function setModelArchived(id: string, archived: boolean): Promise<v
     .where(eq(racketModels.id, id));
 }
 
-const FOREIGN_KEY_VIOLATION = "23503";
-
-function isForeignKeyViolation(err: unknown): boolean {
-  return typeof err === "object" && err !== null && "code" in err && (err as { code?: unknown }).code === FOREIGN_KEY_VIOLATION;
-}
 
 /** True, permanent deletion — unlike setModelArchived. Only offered in the
  * UI for correcting a mistaken entry (a typo'd duplicate, say), not a

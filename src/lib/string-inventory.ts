@@ -9,6 +9,7 @@ import {
   type stringStockUnitEnum,
 } from "@/db/schema";
 import { getInventoryDefaults } from "./settings";
+import { isForeignKeyViolation } from "./db-errors";
 
 export type StringProduct = typeof stringProducts.$inferSelect;
 export type StringInventoryBatch = typeof stringInventoryBatches.$inferSelect;
@@ -25,11 +26,6 @@ export type MovementType = StringInventoryMovement["movementType"];
 // stock, a manual adjustment) can just pass `db`.
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type DbOrTx = typeof db | Tx;
-
-const FOREIGN_KEY_VIOLATION = "23503";
-function isForeignKeyViolation(err: unknown): boolean {
-  return typeof err === "object" && err !== null && "code" in err && (err as { code?: unknown }).code === FOREIGN_KEY_VIOLATION;
-}
 
 // -- string products ---------------------------------------------------
 

@@ -2,6 +2,7 @@ import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { customerRackets, customers, racketBrands, racketModels, racketSeries } from "@/db/schema";
 import { formatStringPattern } from "./racket-label";
+import { isForeignKeyViolation } from "./db-errors";
 
 export { racketLabel } from "./racket-label";
 
@@ -180,11 +181,6 @@ export async function setRacketArchived(id: string, archived: boolean): Promise<
   return row ?? null;
 }
 
-const FOREIGN_KEY_VIOLATION = "23503";
-
-function isForeignKeyViolation(err: unknown): boolean {
-  return typeof err === "object" && err !== null && "code" in err && (err as { code?: unknown }).code === FOREIGN_KEY_VIOLATION;
-}
 
 /** True, permanent deletion — unlike everything else in this file, which
  * archives. Only offered in the UI for correcting a mistaken entry, not as a

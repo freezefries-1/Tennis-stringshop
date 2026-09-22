@@ -4,6 +4,7 @@ import { customerRackets, customers, stringJobInventoryAllocations, stringJobs, 
 import { getRacket, type RacketWithSpecs } from "./rackets";
 import { racketLabel } from "./racket-label";
 import { allocateForRole, InsufficientStockError, previewStock, reverseAllocationsForRole, type StockUnit } from "./string-inventory";
+import { isForeignKeyViolation } from "./db-errors";
 
 export type StringJob = typeof stringJobs.$inferSelect;
 export type StringJobString = typeof stringJobStrings.$inferSelect;
@@ -339,12 +340,6 @@ export async function changeJobStatus(id: string, status: JobStatus, opts?: { al
 export async function changePaymentStatus(id: string, paymentStatus: JobPaymentStatus): Promise<StringJob | null> {
   const [row] = await db.update(stringJobs).set({ paymentStatus, updatedAt: new Date() }).where(eq(stringJobs.id, id)).returning();
   return row ?? null;
-}
-
-const FOREIGN_KEY_VIOLATION = "23503";
-
-function isForeignKeyViolation(err: unknown): boolean {
-  return typeof err === "object" && err !== null && "code" in err && (err as { code?: unknown }).code === FOREIGN_KEY_VIOLATION;
 }
 
 /** True, permanent deletion (mistaken entries only — prefer changeJobStatus
