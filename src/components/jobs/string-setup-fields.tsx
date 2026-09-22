@@ -21,7 +21,7 @@ function TensionField({ label, value, unit, onChange }: { label: string; value: 
   return (
     <Field label={label}>
       <div style={{ display: "flex", gap: 8 }}>
-        <Input type="number" step="0.5" value={value} onChange={(e) => onChange(e.target.value, unit)} placeholder="50" style={{ width: "100%" }} />
+        <Input type="number" inputMode="decimal" step="0.5" value={value} onChange={(e) => onChange(e.target.value, unit)} placeholder="50" style={{ width: "100%" }} />
         {unitSelect(unit, (u) => onChange(value, u))}
       </div>
     </Field>

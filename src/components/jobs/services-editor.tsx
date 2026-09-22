@@ -34,10 +34,10 @@ export function ServicesEditor({ services, onChange }: { services: ServiceLineVa
               </datalist>
             </Field>
             <Field label="Qty" style={{ width: 64, minWidth: 0 }}>
-              <Input type="number" min="0" step="0.5" value={s.quantity} onChange={(e) => update(i, { quantity: e.target.value })} style={{ width: "100%", minWidth: 0 }} />
+              <Input type="number" inputMode="decimal" min="0" step="0.5" value={s.quantity} onChange={(e) => update(i, { quantity: e.target.value })} style={{ width: "100%", minWidth: 0 }} />
             </Field>
             <Field label="Unit price" style={{ width: 90, minWidth: 0 }}>
-              <Input type="number" min="0" step="0.01" value={s.unitPrice} onChange={(e) => update(i, { unitPrice: e.target.value })} placeholder="0.00" style={{ width: "100%", minWidth: 0 }} />
+              <Input type="number" inputMode="decimal" min="0" step="0.01" value={s.unitPrice} onChange={(e) => update(i, { unitPrice: e.target.value })} placeholder="0.00" style={{ width: "100%", minWidth: 0 }} />
             </Field>
             <div className="num" style={{ minWidth: 60, textAlign: "right", paddingBottom: 9, fontSize: 14.5 }}>
               {formatCents(lineTotalCents(s))}

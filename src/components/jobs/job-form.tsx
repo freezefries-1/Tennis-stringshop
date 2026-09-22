@@ -226,7 +226,7 @@ export function JobForm({
             </Field>
             {values.preStretchType === "machine" ? (
               <Field label="Pre-stretch percentage" htmlFor="preStretchPct">
-                <Input id="preStretchPct" type="number" step="1" min="0" max="100" value={values.preStretchPct} onChange={(e) => patch({ preStretchPct: e.target.value })} placeholder="10" suffix="%" style={{ width: 140 }} />
+                <Input id="preStretchPct" type="number" inputMode="numeric" step="1" min="0" max="100" value={values.preStretchPct} onChange={(e) => patch({ preStretchPct: e.target.value })} placeholder="10" suffix="%" style={{ width: 140 }} />
               </Field>
             ) : null}
             <Field label="General notes" htmlFor="generalNotes" hint="Customer-facing — e.g. “wants a softer feel”">
@@ -269,7 +269,7 @@ export function JobForm({
                 <span>{formatCents(subtotalCents)}</span>
               </div>
               <Field label="Discount" htmlFor="discount">
-                <Input id="discount" type="number" min="0" step="0.01" value={values.discount} onChange={(e) => patch({ discount: e.target.value })} placeholder="0.00" style={{ width: "100%" }} />
+                <Input id="discount" type="number" inputMode="decimal" min="0" step="0.01" value={values.discount} onChange={(e) => patch({ discount: e.target.value })} placeholder="0.00" style={{ width: "100%" }} />
               </Field>
               <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 10, borderTop: "1px solid var(--ink-100)", fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17 }}>
                 <span>Total</span>
