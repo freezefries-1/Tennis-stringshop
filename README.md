@@ -1,25 +1,41 @@
-# CODING AGENTS: READ THIS FIRST
+# SportCraft Workshop
 
-This is a **handoff bundle** from Claude Design (claude.ai/design).
+A personal racket-stringing and racket-sports equipment management app: customers,
+rackets, string jobs, sales, inventory, expenses and profit in one place, plus a
+simple point-of-sale. Built for a single-person shop — no accounts, no payment
+processing, SGD by default.
 
-A user mocked up designs in HTML/CSS/JS using an AI design tool, then exported this bundle so a coding agent can implement the designs for real.
+This is **Phase 1**: the app shell, navigation, global search and dashboard,
+built against seed data. See `docs/architecture.html` for the full brief, the
+database design, and the Phase 1–10 build plan, and `AGENTS.md` for where
+things live in this repo.
 
-## What you should do — IMPORTANT
+## Stack
 
-**Read the chat transcripts first.** There are 1 chat transcript(s) in `chats/`. The transcripts show the full back-and-forth between the user and the design assistant — they tell you **what the user actually wants** and **where they landed** after iterating. Don't skip them. The final HTML files are the output, but the chat is where the intent lives.
+Next.js (App Router) · TypeScript · Tailwind · the SportCraft design system
+(`_ds/`, ported to `src/components/ds/`) · Drizzle ORM schema, not yet
+connected to a live database (`src/db/schema.ts`).
 
-**Read `project/index.html` in full.** The user had this file open when they triggered the handoff, so it's almost certainly the primary design they want built. Read it top to bottom — don't skim. Then **follow its imports**: open every file it pulls in (shared components, CSS, scripts) so you understand how the pieces fit together before you start implementing.
+## Getting started
 
-**If anything is ambiguous, ask the user to confirm before you start implementing.** It's much cheaper to clarify scope up front than to build the wrong thing.
+```bash
+npm install
+npm run dev
+```
 
-## About the design files
+Open [http://localhost:3000](http://localhost:3000) — it redirects to
+`/dashboard`.
 
-The design medium is **HTML/CSS/JS** — these are prototypes, not production code. Your job is to **recreate them pixel-perfectly** in whatever technology makes sense for the target codebase (React, Vue, native, whatever fits). Match the visual output; don't copy the prototype's internal structure unless it happens to fit.
+## Scripts
 
-**Don't render these files in a browser or take screenshots unless the user asks you to.** Everything you need — dimensions, colors, layout rules — is spelled out in the source. Read the HTML and CSS directly; a screenshot won't tell you anything they don't.
+- `npm run dev` — start the dev server
+- `npm run build` / `npm run start` — production build and serve
+- `npm run lint` — ESLint
+- `npm run db:generate` / `npm run db:push` — Drizzle migrations, once
+  `DATABASE_URL` points at a real Postgres/Supabase instance
 
-## Bundle contents
+## History
 
-- `README.md` — this file
-- `chats/` — conversation transcripts (read these!)
-- `project/` — the `Add SportCraft system file` project files (HTML prototypes, assets, components)
+This app was scaffolded from a Claude Design prototype. That handoff —
+the original brief, the design assistant's chat transcript, and the HTML/JS
+prototype it produced — is kept for reference under `docs/design-handoff/`.

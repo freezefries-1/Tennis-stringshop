@@ -1,0 +1,12 @@
+/* Webfonts. NOTE: no brand font binaries were supplied; these are the nearest
+   Google Fonts matches, loaded via a <link> in src/app/layout.tsx (a CSS
+   @import here would land after Tailwind's generated rules once bundled, and
+   get dropped — @import must be the first rule in a stylesheet).
+   Space Grotesk = technical/engineered display. Archivo = neutral grotesque workhorse.
+   IBM Plex Mono = specification + numeric data. */
+
+:root{
+  --font-display:"Space Grotesk","Archivo",system-ui,sans-serif;
+  --font-body:"Archivo",system-ui,sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,monospace;
+}

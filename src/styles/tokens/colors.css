@@ -1,0 +1,98 @@
+:root{
+  /* --- Base palette ------------------------------------------------ */
+  /* Court — primary. Deep hard-court green, the brand's structural colour. */
+  --court-900:#07231C;
+  --court-800:#0B3227;
+  --court-700:#0F4436;
+  --court-600:#12573F;
+  --court-500:#166B52;
+  --court-400:#3E8E73;
+  --court-300:#6FA793;
+  --court-200:#AFCCC0;
+  --court-100:#DCEAE3;
+  --court-050:#EFF6F2;
+
+  /* Optic — accent. Ball-felt yellow-green, used in small doses only. */
+  --optic-600:#A8C22F;
+  --optic-500:#C2DC42;
+  --optic-400:#D6F25B;
+  --optic-200:#E9F8AE;
+  --optic-100:#F4FBD9;
+
+  /* Clay — secondary. Crushed-brick court surface. */
+  --clay-700:#8E3F22;
+  --clay-600:#B3542F;
+  --clay-500:#C86A41;
+  --clay-300:#E0A184;
+  --clay-100:#F6E2D7;
+
+  /* Ink — neutrals, slightly cool-grey. */
+  --ink-900:#101418;
+  --ink-800:#1B2126;
+  --ink-700:#2A3138;
+  --ink-600:#434C54;
+  --ink-500:#5A646D;
+  --ink-400:#79838B;
+  --ink-300:#98A1A8;
+  --ink-200:#C7CDD1;
+  --ink-100:#E3E7E9;
+  --ink-050:#F0F2F3;
+
+  /* Paper — warm off-white grounds. */
+  --paper-000:#FFFFFF;
+  --paper-050:#FAF9F6;
+  --paper-100:#F3F1EC;
+  --paper-200:#E9E6DF;
+
+  /* Semantic base hues */
+  --signal-success:#157F52;
+  --signal-success-bg:#E2F1E9;
+  --signal-warning:#9A6B0C;
+  --signal-warning-bg:#FAEED2;
+  --signal-danger:#B0342A;
+  --signal-danger-bg:#F8E3E0;
+  --signal-info:#2C5BA8;
+  --signal-info-bg:#E4EBF7;
+
+  /* --- Semantic aliases -------------------------------------------- */
+  --text-primary:var(--ink-900);
+  --text-secondary:var(--ink-600);
+  --text-muted:var(--ink-400);
+  --text-inverse:var(--paper-050);
+  --text-accent:var(--court-600);
+  --text-link:var(--court-600);
+  --text-link-hover:var(--court-800);
+
+  --surface-page:var(--paper-050);
+  --surface-card:var(--paper-000);
+  --surface-sunken:var(--paper-100);
+  --surface-raised:var(--paper-000);
+  --surface-inverse:var(--ink-900);
+  --surface-brand:var(--court-700);
+  --surface-brand-soft:var(--court-050);
+  --surface-accent:var(--optic-400);
+
+  --border-hairline:var(--ink-100);
+  --border-subtle:var(--ink-200);
+  --border-strong:var(--ink-700);
+  --border-brand:var(--court-600);
+
+  --action-primary-bg:var(--court-700);
+  --action-primary-bg-hover:var(--court-800);
+  --action-primary-bg-active:var(--court-900);
+  --action-primary-fg:var(--paper-000);
+  --action-secondary-bg:var(--paper-000);
+  --action-secondary-fg:var(--ink-900);
+  --action-ghost-fg:var(--ink-700);
+  --action-disabled-bg:var(--ink-050);
+  --action-disabled-fg:var(--ink-300);
+
+  --focus-ring:var(--optic-500);
+  --focus-ring-offset:var(--paper-050);
+
+  /* Surface-family chips used across the app for racket string types */
+  --string-poly:var(--court-500);
+  --string-gut:var(--clay-500);
+  --string-multi:var(--signal-info);
+  --string-hybrid:var(--optic-600);
+}

@@ -1,0 +1,13 @@
+:root{
+  --duration-instant:80ms; /* @kind other */
+  --duration-fast:140ms; /* @kind other */
+  --duration-base:200ms; /* @kind other */
+  --duration-slow:320ms; /* @kind other */
+
+  /* Precise, no bounce, no overshoot. */
+  --ease-standard:cubic-bezier(0.2,0.6,0.2,1); /* @kind other */
+  --ease-enter:cubic-bezier(0.05,0.7,0.1,1); /* @kind other */
+  --ease-exit:cubic-bezier(0.4,0,1,1); /* @kind other */
+
+  --transition-control:background-color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard), box-shadow var(--duration-fast) var(--ease-standard);
+}
