@@ -3,12 +3,14 @@
 import Link from "next/link";
 import { Button } from "@/components/ds/button";
 import { GlobalSearch } from "./global-search";
+import { BackButton } from "./back-button";
 import { PAGES } from "@/lib/nav";
 
 export function TopBar({ page }: { page: string }) {
   const p = PAGES[page] ?? PAGES.dashboard;
   return (
     <header className="top">
+      <BackButton />
       <div className="top-t">
         <div className="lab">{p.label}</div>
         <h1>{p.title}</h1>
