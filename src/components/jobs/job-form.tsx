@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { Field } from "@/components/ds/field";
 import { Input } from "@/components/ds/input";
@@ -16,7 +16,20 @@ import { formatCents, formatDate } from "@/lib/format";
 import type { RacketWithSpecs } from "@/lib/rackets";
 import { fetchPreviousSetup } from "@/app/jobs/actions";
 import type { PreviousJobSetup } from "@/lib/jobs";
-import { applyRepeatToValues, type JobFormState, type JobFormValues } from "@/lib/job-form-types";
+import { applyRepeatToValues, type JobFormState, type JobFormValues, type StringUsageDefaultsView } from "@/lib/job-form-types";
+
+/** Fills in a still-blank usage field from Settings' defaults (brief §12) —
+ * never overwrites something the user already typed, repeated from a
+ * previous job, or that came back from a rejected submit. */
+function withUsageDefaults(values: JobFormValues, defaults: StringUsageDefaultsView): JobFormValues {
+  if (values.setupType === "full") {
+    if (values.main.customerSupplied || values.main.quantityUsed) return values;
+    return { ...values, main: { ...values.main, quantityUsed: String(defaults.fullBedUsageM) } };
+  }
+  const main = !values.main.customerSupplied && !values.main.quantityUsed ? { ...values.main, quantityUsed: String(defaults.mainUsageM) } : values.main;
+  const cross = !values.cross.customerSupplied && !values.cross.quantityUsed ? { ...values.cross, quantityUsed: String(defaults.crossUsageM) } : values.cross;
+  return { ...values, main, cross };
+}
 
 function SubmitButton({ label }: { label: string }) {
   const { pending } = useFormStatus();
@@ -71,6 +84,7 @@ export function JobForm({
   customers,
   initialCustomer = null,
   initialRacket = null,
+  stringUsageDefaults,
   submitLabel,
 }: {
   mode: "create" | "edit";
@@ -86,17 +100,23 @@ export function JobForm({
   customers: PickerCustomer[];
   initialCustomer?: PickerCustomer | null;
   initialRacket?: RacketWithSpecs | null;
+  stringUsageDefaults: StringUsageDefaultsView;
   submitLabel: string;
 }) {
   const [state, formAction] = useActionState(action, initialState);
   const [customer, setCustomer] = useState<PickerCustomer | null>(initialCustomer);
   const [racket, setRacket] = useState<RacketWithSpecs | null>(initialRacket);
-  const [values, setValues] = useState<JobFormValues>(state.values);
+  const [values, setValues] = useState<JobFormValues>(initialRacket ? withUsageDefaults(state.values, stringUsageDefaults) : state.values);
   const [previousSetup, setPreviousSetup] = useState<PreviousJobSetup | null | undefined>(undefined);
   // Flips on synchronously wherever the racket selection changes (the
   // onSelect handlers below), not here — set-state-in-effect only allows
   // async updates (inside .then()) in the effect body itself.
   const [loadingPrevious, setLoadingPrevious] = useState(!!initialRacket);
+  // Confirmed via the insufficient-stock warning's "Save anyway" button —
+  // see the effect below for why this can't just be a submit-button click.
+  const [stockOverride, setStockOverride] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
+  const pendingOverrideSubmit = useRef(false);
 
   useEffect(() => {
     if (!racket) return;
@@ -105,21 +125,40 @@ export function JobForm({
       if (!cancelled) {
         setPreviousSetup(setup);
         setLoadingPrevious(false);
+        // A found previous setup is only applied if/when the user clicks
+        // "Repeat previous setup" below — either way, a still-blank usage
+        // field gets Settings' default as a starting point now.
+        setValues((v) => withUsageDefaults(v, stringUsageDefaults));
       }
     });
     return () => {
       cancelled = true;
     };
+    // stringUsageDefaults is a stable prop (fetched once server-side) —
+    // only racket/jobId identity should re-trigger the lookup.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [racket, jobId]);
+
+  // Re-submits the form once `stockOverride` has actually re-rendered into
+  // the hidden input below — a submit button's onClick fires before React
+  // commits a state update, so clicking "Save anyway" straight away would
+  // still send the stale (unconfirmed) value.
+  useEffect(() => {
+    if (pendingOverrideSubmit.current && stockOverride) {
+      pendingOverrideSubmit.current = false;
+      formRef.current?.requestSubmit();
+    }
+  }, [stockOverride]);
 
   const subtotalCents = useMemo(() => values.services.reduce((sum, s) => sum + lineTotalCents(s), 0), [values.services]);
   const discountCents = Math.round((Number.parseFloat(values.discount) || 0) * 100);
   const totalCents = Math.max(0, subtotalCents - discountCents);
 
   const patch = (p: Partial<JobFormValues>) => setValues((v) => ({ ...v, ...p }));
+  const patchSetupType = (setupType: "full" | "hybrid") => setValues((v) => (v.setupType === setupType ? v : withUsageDefaults({ ...v, setupType }, stringUsageDefaults)));
 
   return (
-    <form action={formAction} className="job-layout">
+    <form ref={formRef} action={formAction} className="job-layout">
       <input type="hidden" name="customerId" value={customer?.id ?? ""} />
       <input type="hidden" name="customerRacketId" value={racket?.id ?? ""} />
       <input type="hidden" name="setupType" value={values.setupType} />
@@ -133,20 +172,27 @@ export function JobForm({
       <input type="hidden" name="discount" value={values.discount} />
       <input type="hidden" name="generalNotes" value={values.generalNotes} />
       <input type="hidden" name="stringingNotes" value={values.stringingNotes} />
+      <input type="hidden" name="allowStockOverride" value={String(stockOverride)} />
       <input type="hidden" name="main.customerSupplied" value={String(values.main.customerSupplied)} />
+      <input type="hidden" name="main.stringProductId" value={values.main.stringProductId} />
       <input type="hidden" name="main.brand" value={values.main.brand} />
       <input type="hidden" name="main.stringName" value={values.main.stringName} />
       <input type="hidden" name="main.gauge" value={values.main.gauge} />
       <input type="hidden" name="main.colour" value={values.main.colour} />
       <input type="hidden" name="main.tension" value={values.main.tension} />
       <input type="hidden" name="main.tensionUnit" value={values.main.tensionUnit} />
+      <input type="hidden" name="main.quantityUsed" value={values.main.quantityUsed} />
+      <input type="hidden" name="main.usageUnit" value={values.main.usageUnit} />
       <input type="hidden" name="cross.customerSupplied" value={String(values.cross.customerSupplied)} />
+      <input type="hidden" name="cross.stringProductId" value={values.cross.stringProductId} />
       <input type="hidden" name="cross.brand" value={values.cross.brand} />
       <input type="hidden" name="cross.stringName" value={values.cross.stringName} />
       <input type="hidden" name="cross.gauge" value={values.cross.gauge} />
       <input type="hidden" name="cross.colour" value={values.cross.colour} />
       <input type="hidden" name="cross.tension" value={values.cross.tension} />
       <input type="hidden" name="cross.tensionUnit" value={values.cross.tensionUnit} />
+      <input type="hidden" name="cross.quantityUsed" value={values.cross.quantityUsed} />
+      <input type="hidden" name="cross.usageUnit" value={values.cross.usageUnit} />
       <input type="hidden" name="servicesCount" value={values.services.length} />
       {values.services.map((s, i) => (
         <span key={i}>
@@ -161,6 +207,31 @@ export function JobForm({
         {state.status === "error" ? (
           <div className="form-warning">
             <p>{state.message}</p>
+          </div>
+        ) : null}
+        {state.status === "insufficient_stock" ? (
+          <div className="form-warning">
+            <p>{state.message}</p>
+            <ul style={{ margin: "8px 0", paddingLeft: 18 }}>
+              {(state.shortages ?? []).map((s, i) => (
+                <li key={i} style={{ fontSize: 13.5 }}>
+                  {s.productLabel} ({s.role}): needed {s.neededM}
+                  {s.unit === "set" ? " sets" : "m"}, only {s.availableM}
+                  {s.unit === "set" ? " sets" : "m"} available
+                </li>
+              ))}
+            </ul>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                pendingOverrideSubmit.current = true;
+                setStockOverride(true);
+              }}
+            >
+              Save anyway (uses more stock than recorded)
+            </Button>
           </div>
         ) : null}
 
@@ -208,10 +279,10 @@ export function JobForm({
           <Card padding="20px" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <div className="lab">String setup</div>
             <div className="tabs-lite" role="tablist">
-              <button type="button" className={"tab-lite" + (values.setupType === "full" ? " on" : "")} onClick={() => patch({ setupType: "full" })}>
+              <button type="button" className={"tab-lite" + (values.setupType === "full" ? " on" : "")} onClick={() => patchSetupType("full")}>
                 Full bed
               </button>
-              <button type="button" className={"tab-lite" + (values.setupType === "hybrid" ? " on" : "")} onClick={() => patch({ setupType: "hybrid" })}>
+              <button type="button" className={"tab-lite" + (values.setupType === "hybrid" ? " on" : "")} onClick={() => patchSetupType("hybrid")}>
                 Hybrid
               </button>
             </div>

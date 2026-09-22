@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { getJob } from "@/lib/jobs";
+import { getStringUsageDefaults } from "@/lib/settings";
 import { JobForm } from "@/components/jobs/job-form";
 import { updateJobAction } from "@/app/jobs/actions";
 import { toStringLine, type JobFormState } from "@/lib/job-form-types";
@@ -8,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 export default async function EditJobPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const job = await getJob(id);
+  const [job, stringUsageDefaults] = await Promise.all([getJob(id), getStringUsageDefaults()]);
   if (!job) notFound();
 
   const main = job.strings.find((s) => s.role === "main");
@@ -52,6 +53,7 @@ export default async function EditJobPage({ params }: { params: Promise<{ id: st
           customers={[]}
           initialCustomer={initialCustomer}
           initialRacket={job.racket}
+          stringUsageDefaults={stringUsageDefaults}
           submitLabel="Save changes"
         />
       </div>

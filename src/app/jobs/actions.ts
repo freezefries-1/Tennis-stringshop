@@ -18,6 +18,7 @@ import {
 } from "@/lib/jobs";
 import { createRacket, listRacketsForCustomer, type RacketInput } from "@/lib/rackets";
 import { findCustomerByPhone, createCustomer } from "@/lib/customers";
+import { createStringProduct, searchStringProductsForPicker, type StringProductInput } from "@/lib/string-inventory";
 import type { JobFormState, JobFormValues } from "@/lib/job-form-types";
 
 function readStringLine(formData: FormData, prefix: "main" | "cross") {
@@ -25,12 +26,15 @@ function readStringLine(formData: FormData, prefix: "main" | "cross") {
   return {
     role: prefix,
     customerSupplied: formData.get(`${prefix}.customerSupplied`) === "true",
+    stringProductId: get("stringProductId") || null,
     brand: get("brand"),
     stringName: get("stringName"),
     gauge: get("gauge"),
     colour: get("colour"),
     tension: get("tension"),
     tensionUnit: (get("tensionUnit") || "lb") as "kg" | "lb",
+    quantityUsed: get("quantityUsed") || null,
+    usageUnit: (get("usageUnit") || "m") as "m" | "set",
   } satisfies StringSetupInput;
 }
 
@@ -70,15 +74,45 @@ function readValues(formData: FormData): JobFormValues {
     discount: get("discount"),
     generalNotes: get("generalNotes"),
     stringingNotes: get("stringingNotes"),
-    main: { customerSupplied: main.customerSupplied, brand: main.brand, stringName: main.stringName, gauge: main.gauge, colour: main.colour, tension: main.tension, tensionUnit: main.tensionUnit },
-    cross: { customerSupplied: cross.customerSupplied, brand: cross.brand, stringName: cross.stringName, gauge: cross.gauge, colour: cross.colour, tension: cross.tension, tensionUnit: cross.tensionUnit },
+    main: {
+      customerSupplied: main.customerSupplied,
+      stringProductId: main.stringProductId ?? "",
+      brand: main.brand,
+      stringName: main.stringName,
+      gauge: main.gauge,
+      colour: main.colour,
+      tension: main.tension,
+      tensionUnit: main.tensionUnit,
+      quantityUsed: main.quantityUsed ?? "",
+      usageUnit: main.usageUnit,
+    },
+    cross: {
+      customerSupplied: cross.customerSupplied,
+      stringProductId: cross.stringProductId ?? "",
+      brand: cross.brand,
+      stringName: cross.stringName,
+      gauge: cross.gauge,
+      colour: cross.colour,
+      tension: cross.tension,
+      tensionUnit: cross.tensionUnit,
+      quantityUsed: cross.quantityUsed ?? "",
+      usageUnit: cross.usageUnit,
+    },
     services: services.map((s) => ({ serviceName: s.serviceName, quantity: s.quantity, unitPrice: (s.unitPriceCents / 100).toFixed(2), notes: s.notes ?? "" })),
   };
 }
 
 function toInput(values: JobFormValues): JobInput {
   const mains: StringSetupInput = { role: "main", ...values.main };
-  const crossSource = values.setupType === "full" ? { ...values.main, tension: values.cross.tension, tensionUnit: values.cross.tensionUnit } : values.cross;
+  // A full bed is one continuous string threaded through the whole racket —
+  // main/cross share brand/string/gauge/colour/source, but only the main
+  // row carries the product link + quantity used. Deducting both would
+  // double-count the same physical length against inventory (brief §16's
+  // hybrid example implies two *independent* strings; a full bed is one).
+  const crossSource =
+    values.setupType === "full"
+      ? { ...values.main, tension: values.cross.tension, tensionUnit: values.cross.tensionUnit, stringProductId: "", quantityUsed: "" }
+      : values.cross;
   const crosses: StringSetupInput = { role: "cross", ...crossSource };
   const services: ServiceInput[] = values.services
     .filter((s) => s.serviceName.trim() || s.unitPrice.trim())
@@ -107,17 +141,29 @@ function toInput(values: JobFormValues): JobInput {
   };
 }
 
+function validateStringLine(line: JobFormValues["main"], label: string): string | null {
+  if (!line.brand.trim() || !line.stringName.trim()) return `Enter the ${label} string's brand and name.`;
+  if (!line.tension.trim()) return `Enter the ${label} tension.`;
+  if (!line.customerSupplied) {
+    if (!line.stringProductId) return `Select a string from inventory for the ${label}, or mark it customer supplied.`;
+    if (!line.quantityUsed.trim() || Number(line.quantityUsed) <= 0) return `Enter how much string was used for the ${label}.`;
+  }
+  return null;
+}
+
 function validate(values: JobFormValues): string | null {
   if (!values.customerId) return "Select a customer.";
   if (!values.customerRacketId) return "Select a racket.";
   if (!values.receivedOn) return "Date received is required.";
-  if (!values.main.brand.trim() || !values.main.stringName.trim()) return "Enter the main string's brand and name.";
-  if (!values.main.tension.trim()) return "Enter the main tension.";
   if (values.setupType === "hybrid") {
-    if (!values.cross.brand.trim() || !values.cross.stringName.trim()) return "Enter the cross string's brand and name.";
-    if (!values.cross.tension.trim()) return "Enter the cross tension.";
-  } else if (!values.cross.tension.trim()) {
-    return "Enter the cross tension.";
+    return validateStringLine(values.main, "main") ?? validateStringLine(values.cross, "cross");
+  }
+  if (!values.main.brand.trim() || !values.main.stringName.trim()) return "Enter the string's brand and name.";
+  if (!values.main.tension.trim()) return "Enter the main tension.";
+  if (!values.cross.tension.trim()) return "Enter the cross tension.";
+  if (!values.main.customerSupplied) {
+    if (!values.main.stringProductId) return "Select a string from inventory, or mark it customer supplied.";
+    if (!values.main.quantityUsed.trim() || Number(values.main.quantityUsed) <= 0) return "Enter how much string was used.";
   }
   return null;
 }
@@ -139,7 +185,14 @@ export async function updateJobAction(jobId: string, prevState: JobFormState, fo
   const error = validate(values);
   if (error) return { status: "error", message: error, values };
 
-  await updateJob(jobId, toInput(values));
+  const allowStockOverride = formData.get("allowStockOverride") === "true";
+  const result = await updateJob(jobId, toInput(values), { allowStockOverride });
+  if (!result.ok) {
+    if (result.reason === "insufficient_stock") {
+      return { status: "insufficient_stock", message: "Not enough stock for the updated string usage.", shortages: result.shortages, values };
+    }
+    return { status: "error", message: "This job no longer exists.", values };
+  }
   revalidatePath("/jobs");
   revalidatePath(`/jobs/${jobId}`);
   revalidatePath(`/customers/${values.customerId}`);
@@ -147,14 +200,15 @@ export async function updateJobAction(jobId: string, prevState: JobFormState, fo
   redirect(`/jobs/${jobId}`);
 }
 
-export async function changeJobStatusAction(jobId: string, status: JobStatus) {
-  const job = await changeJobStatus(jobId, status);
+export async function changeJobStatusAction(jobId: string, status: JobStatus, allowStockOverride = false) {
+  const result = await changeJobStatus(jobId, status, { allowStockOverride });
   revalidatePath("/jobs");
   revalidatePath(`/jobs/${jobId}`);
-  if (job) {
-    revalidatePath(`/customers/${job.customerId}`);
-    revalidatePath(`/customers/${job.customerId}/rackets/${job.customerRacketId}`);
+  if (result.ok) {
+    revalidatePath(`/customers/${result.job.customerId}`);
+    revalidatePath(`/customers/${result.job.customerId}/rackets/${result.job.customerRacketId}`);
   }
+  return result;
 }
 
 export async function changePaymentStatusAction(jobId: string, paymentStatus: JobPaymentStatus) {
@@ -207,4 +261,18 @@ export async function quickCreateCustomerForJob(name: string, phone: string) {
 
 export async function quickCreateRacketForJob(customerId: string, input: RacketInput) {
   return createRacket(customerId, input);
+}
+
+/** The SportCraft Stock string picker (StringSetupSection) — search-as-you-
+ * type, showing live stock (brief §18). */
+export async function fetchStringProductsForPicker(query: string) {
+  return searchStringProductsForPicker(query);
+}
+
+/** Quick-add a new String Product from inside the job form, same "don't
+ * make me leave the job" reasoning as quickCreateRacketForJob — creates
+ * only the catalogue entry, not stock (receiving stock is a separate,
+ * deliberate workflow at /inventory). */
+export async function quickCreateStringProductForJob(input: StringProductInput) {
+  return createStringProduct(input);
 }

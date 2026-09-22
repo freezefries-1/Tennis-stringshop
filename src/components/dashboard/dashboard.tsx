@@ -9,7 +9,8 @@ import { ProgressBar } from "@/components/ds/progress-bar";
 import { SpecList, type SpecListItem } from "@/components/ds/spec-list";
 import { StatBlock } from "@/components/ds/stat-block";
 import { DATA } from "@/lib/data";
-import { formatMoney, formatMoney0 } from "@/lib/format";
+import { formatMoney, formatMoney0, formatDate } from "@/lib/format";
+import type { LowStockRow, RecentMovementRow } from "@/lib/string-inventory";
 
 function PanelHead({ label, title, action }: { label: string; title?: string; action?: ReactNode }) {
   return (
@@ -183,13 +184,13 @@ function ReadyList() {
   );
 }
 
-function LowStock() {
+function LowStock({ items }: { items: LowStockRow[] }) {
   const router = useRouter();
   return (
     <Card padding="20px 0 8px">
       <div style={{ padding: "0 24px" }}>
         <PanelHead
-          label={`Low stock · ${DATA.lowStock.length}`}
+          label={`Low stock · ${items.length}`}
           action={
             <Button size="sm" variant="ghost" iconRight="arrow-right" onClick={() => router.push("/inventory")}>
               Receive stock
@@ -197,27 +198,86 @@ function LowStock() {
           }
         />
       </div>
-      <div className="rows">
-        {DATA.lowStock.map((s) => (
-          <div className="row" key={s.name}>
-            <div className="row-main">
-              <div className="row-t">
-                {s.family ? <i className="dot" style={{ background: s.family }} /> : null}
-                {s.name}
+      {items.length === 0 ? (
+        <div style={{ padding: "0 24px 16px" }} className="row-s">
+          Nothing low or out of stock right now.
+        </div>
+      ) : (
+        <div className="rows">
+          {items.map((s) => {
+            const available = Number(s.available);
+            const threshold = Number(s.threshold) || 1;
+            return (
+              <div className="row" key={s.productId} onClick={() => router.push(`/inventory/products/${s.productId}`)} style={{ cursor: "pointer" }}>
+                <div className="row-main">
+                  <div className="row-t">{s.label}</div>
+                  <div className="row-s num">reorder at {s.threshold} {s.unit === "set" ? "sets" : "m"}</div>
+                </div>
+                <div className="row-end" style={{ minWidth: 104 }}>
+                  <span className="num" style={{ color: s.status === "out_of_stock" ? "var(--signal-danger)" : "var(--signal-warning)", fontSize: 14 }}>
+                    {s.available} {s.unit === "set" ? "sets" : "m"}
+                  </span>
+                  <ProgressBar value={available} max={threshold} height={4} tone={s.status === "out_of_stock" ? "danger" : "warning"} style={{ width: 96 }} />
+                </div>
               </div>
-              <div className="row-s num">
-                {s.detail} · reorder at {s.threshold} {s.unit}
-              </div>
-            </div>
-            <div className="row-end" style={{ minWidth: 104 }}>
-              <span className="num" style={{ color: s.left <= s.threshold / 2 ? "var(--signal-danger)" : "var(--signal-warning)", fontSize: 14 }}>
-                {s.left} {s.unit}
-              </span>
-              <ProgressBar value={s.left} max={s.of} height={4} tone={s.left <= s.threshold / 2 ? "danger" : "warning"} style={{ width: 96 }} />
-            </div>
-          </div>
-        ))}
+            );
+          })}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function RecentInventoryMovements({ movements }: { movements: RecentMovementRow[] }) {
+  const router = useRouter();
+  const MOVEMENT_LABEL: Record<string, string> = {
+    received: "Stock received",
+    string_job: "String job",
+    manual_add: "Manual addition",
+    manual_deduct: "Manual deduction",
+    wastage: "Wastage",
+    correction: "Correction",
+    reversal: "Reversal",
+  };
+  return (
+    <Card padding="20px 0 8px">
+      <div style={{ padding: "0 24px" }}>
+        <PanelHead
+          label="Recent inventory movements"
+          action={
+            <Button size="sm" variant="ghost" iconRight="arrow-right" onClick={() => router.push("/inventory")}>
+              All inventory
+            </Button>
+          }
+        />
       </div>
+      {movements.length === 0 ? (
+        <div style={{ padding: "0 24px 16px" }} className="row-s">
+          No stock movements yet.
+        </div>
+      ) : (
+        <div className="rows">
+          {movements.map((m) => (
+            <div className="row" key={m.id}>
+              <div className="row-main">
+                <div className="row-t">{m.productLabel}</div>
+                <div className="row-s num">
+                  {MOVEMENT_LABEL[m.movementType] ?? m.movementType}
+                  {m.jobCode ? ` · ${m.jobCode}` : ""}
+                </div>
+              </div>
+              <div className="row-end">
+                <span className="row-s num">{formatDate(m.occurredAt)}</span>
+                <span className="num" style={{ fontSize: 14.5 }}>
+                  {Number(m.quantityChange) > 0 ? "+" : ""}
+                  {m.quantityChange}
+                  {m.unit === "set" ? " sets" : "m"}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </Card>
   );
 }
@@ -297,7 +357,7 @@ function RecentSales() {
   );
 }
 
-export function Dashboard() {
+export function Dashboard({ lowStock, recentMovements }: { lowStock: LowStockRow[]; recentMovements: RecentMovementRow[] }) {
   const t = DATA.today;
   return (
     <div className="dash">
@@ -370,7 +430,7 @@ export function Dashboard() {
       </div>
       <div className="g2">
         <ReadyList />
-        <LowStock />
+        <LowStock items={lowStock} />
       </div>
 
       <div className="sec-head">
@@ -380,6 +440,9 @@ export function Dashboard() {
       <div className="g2">
         <RecentJobs />
         <RecentSales />
+      </div>
+      <div className="g1">
+        <RecentInventoryMovements movements={recentMovements} />
       </div>
     </div>
   );

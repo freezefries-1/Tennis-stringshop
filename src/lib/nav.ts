@@ -86,14 +86,7 @@ export const PAGES: Record<string, PageMeta> = {
     title: "Inventory",
     label: "Stock",
     action: "Receive stock",
-    phase: 5,
-    builds: [
-      "Reels tracked in metres, sets and products in units",
-      "Batches with their own purchase cost — FIFO consumption",
-      "Full movement ledger: purchase, sale, string job, adjustment, return, write-off",
-      "Low-stock thresholds and inventory value",
-      "Negative stock blocked unless explicitly overridden",
-    ],
+    actionHref: "/inventory/receive",
   },
   products: {
     title: "Products",
@@ -141,14 +134,6 @@ export const PAGES: Record<string, PageMeta> = {
     title: "Settings",
     label: "Workshop",
     action: null,
-    phase: 1,
-    builds: [
-      "Business name, currency — SportCraft, SGD",
-      "Default labour charge and default string usage in metres",
-      "Payment methods, expense categories, product categories",
-      "String job statuses and low-stock thresholds",
-      "CSV import and export, backup schedule",
-    ],
   },
   checklist: { title: "Phase 1 checklist", label: "Build", action: null },
 };

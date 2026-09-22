@@ -43,6 +43,13 @@
       "when": 1790071166818,
       "tag": "0005_lyrical_thor",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790096957168,
+      "tag": "0006_phase5_string_inventory",
+      "breakpoints": true
     }
   ]
 }

@@ -1,11 +1,34 @@
 export interface StringLineValues {
   customerSupplied: boolean;
+  /** SportCraft Stock only, set by the string product picker — cleared
+   * whenever customerSupplied flips true (brief §15). */
+  stringProductId: string;
   brand: string;
   stringName: string;
   gauge: string;
   colour: string;
   tension: string;
   tensionUnit: "kg" | "lb";
+  quantityUsed: string;
+  usageUnit: "m" | "set";
+}
+
+/** Plain mirror of settings.ts's StringUsageDefaults — kept here (not
+ * imported from src/lib/settings.ts) so this file, which Client Components
+ * import directly, never pulls the DB-touching settings module into the
+ * browser bundle. */
+export interface StringUsageDefaultsView {
+  fullBedUsageM: number;
+  mainUsageM: number;
+  crossUsageM: number;
+}
+
+export interface StockShortageView {
+  role: "main" | "cross";
+  productLabel: string;
+  neededM: string;
+  availableM: string;
+  unit: "m" | "set";
 }
 
 export interface ServiceLineValues {
@@ -35,19 +58,23 @@ export interface JobFormValues {
 }
 
 export interface JobFormState {
-  status: "idle" | "error";
+  status: "idle" | "error" | "insufficient_stock";
   message?: string;
+  shortages?: StockShortageView[];
   values: JobFormValues;
 }
 
 export const emptyStringLine: StringLineValues = {
   customerSupplied: false,
+  stringProductId: "",
   brand: "",
   stringName: "",
   gauge: "",
   colour: "",
   tension: "",
   tensionUnit: "lb",
+  quantityUsed: "",
+  usageUnit: "m",
 };
 
 export function emptyJobFormValues(receivedOn: string): JobFormValues {
@@ -88,7 +115,19 @@ export const COMMON_SERVICES = ["String cost", "Stringing labour", "Grip replace
 // this file directly, e.g. the "Repeat previous setup" button).
 export interface RepeatableSetup {
   setupType: "full" | "hybrid";
-  strings: { role: "main" | "cross"; customerSupplied: boolean; brandSnapshot: string; stringNameSnapshot: string; gaugeSnapshot: string | null; colourSnapshot: string | null; tension: string; tensionUnit: "kg" | "lb" }[];
+  strings: {
+    role: "main" | "cross";
+    customerSupplied: boolean;
+    stringProductId: string | null;
+    brandSnapshot: string;
+    stringNameSnapshot: string;
+    gaugeSnapshot: string | null;
+    colourSnapshot: string | null;
+    tension: string;
+    tensionUnit: "kg" | "lb";
+    quantityUsed: string | null;
+    usageUnit: "m" | "set" | null;
+  }[];
   services: { serviceName: string; quantity: string; unitPriceCents: number; notes: string | null }[];
   discountCents: number;
   numberOfKnots: number | null;
@@ -101,12 +140,18 @@ export function toStringLine(s: RepeatableSetup["strings"][number] | undefined):
   if (!s) return { ...emptyStringLine };
   return {
     customerSupplied: s.customerSupplied,
+    // The picker's "selected" chip renders straight off brand/stringName
+    // below (see string-setup-fields.tsx) — no extra lookup needed to
+    // restore a repeated/edited line's selection.
+    stringProductId: s.stringProductId ?? "",
     brand: s.brandSnapshot,
     stringName: s.stringNameSnapshot,
     gauge: s.gaugeSnapshot ?? "",
     colour: s.colourSnapshot ?? "",
     tension: s.tension,
     tensionUnit: s.tensionUnit,
+    quantityUsed: s.quantityUsed ?? "",
+    usageUnit: s.usageUnit ?? "m",
   };
 }
 

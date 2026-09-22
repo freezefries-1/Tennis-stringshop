@@ -49,20 +49,28 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
     ...(job.racket.nickname ? [{ label: "Nickname", value: job.racket.nickname }] : []),
   ];
 
+  function usageLabel(s: typeof main): string | null {
+    if (!s || !s.quantityUsed) return null;
+    return `${s.quantityUsed}${s.usageUnit === "set" ? " sets" : "m"} used${s.stockOverride ? " (stock override)" : ""}`;
+  }
+
   const stringItems: SpecListItem[] = sameString
     ? [
         { label: "String", value: `${main.brandSnapshot} ${main.stringNameSnapshot}${main.customerSupplied ? " (customer supplied)" : ""}` },
         { label: "Gauge", value: main.gaugeSnapshot ? `${main.gaugeSnapshot} mm` : "—" },
         { label: "Colour", value: main.colourSnapshot ?? "—" },
         { label: "Tension", value: sameTension ? `${main.tension} ${main.tensionUnit}` : `${main.tension} / ${cross?.tension} ${main.tensionUnit}` },
+        ...(usageLabel(main) ? [{ label: "Usage", value: usageLabel(main) as string }] : []),
       ]
     : [
         { label: "Main string", value: main ? `${main.brandSnapshot} ${main.stringNameSnapshot}${main.customerSupplied ? " (customer supplied)" : ""}` : "—" },
         { label: "Main gauge / colour", value: main ? [main.gaugeSnapshot ? `${main.gaugeSnapshot} mm` : null, main.colourSnapshot].filter(Boolean).join(" · ") || "—" : "—" },
         { label: "Main tension", value: main ? `${main.tension} ${main.tensionUnit}` : "—" },
+        ...(usageLabel(main) ? [{ label: "Main usage", value: usageLabel(main) as string }] : []),
         { label: "Cross string", value: cross ? `${cross.brandSnapshot} ${cross.stringNameSnapshot}${cross.customerSupplied ? " (customer supplied)" : ""}` : "—" },
         { label: "Cross gauge / colour", value: cross ? [cross.gaugeSnapshot ? `${cross.gaugeSnapshot} mm` : null, cross.colourSnapshot].filter(Boolean).join(" · ") || "—" : "—" },
         { label: "Cross tension", value: cross ? `${cross.tension} ${cross.tensionUnit}` : "—" },
+        ...(usageLabel(cross) ? [{ label: "Cross usage", value: usageLabel(cross) as string }] : []),
       ];
   stringItems.push(
     { label: "Number of knots", value: job.numberOfKnots ?? "—" },
@@ -191,6 +199,22 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
             <span>Total</span>
             <span className="num">{formatCents(job.finalPriceCents)}</span>
           </div>
+
+          {job.stringCogsCents > 0 || job.stringRevenueCents > 0 ? (
+            <>
+              <div className="lab" style={{ marginTop: 20, marginBottom: 8 }}>
+                String cost
+              </div>
+              <SpecList
+                dense
+                items={[
+                  { label: "String revenue", value: <span className="num">{formatCents(job.stringRevenueCents)}</span> },
+                  { label: "String COGS", value: <span className="num" style={{ color: "var(--ink-500)" }}>−{formatCents(job.stringCogsCents)}</span> },
+                  { label: "String gross profit", value: <span className="num">{formatCents(job.stringGrossProfitCents)}</span> },
+                ]}
+              />
+            </>
+          ) : null}
 
           <div className="lab" style={{ marginTop: 20, marginBottom: 8 }}>
             Payment

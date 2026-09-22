@@ -1,12 +1,14 @@
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db/client";
-import { customerRackets, customers, stringJobs, stringJobServices, stringJobStrings } from "@/db/schema";
+import { customerRackets, customers, stringJobInventoryAllocations, stringJobs, stringJobServices, stringJobStrings } from "@/db/schema";
 import { getRacket, type RacketWithSpecs } from "./rackets";
 import { racketLabel } from "./racket-label";
+import { allocateForRole, InsufficientStockError, previewStock, reverseAllocationsForRole, type StockUnit } from "./string-inventory";
 
 export type StringJob = typeof stringJobs.$inferSelect;
 export type StringJobString = typeof stringJobStrings.$inferSelect;
 export type StringJobService = typeof stringJobServices.$inferSelect;
+export type StringJobAllocation = typeof stringJobInventoryAllocations.$inferSelect;
 export type JobStatus = StringJob["status"];
 export type JobPaymentStatus = StringJob["paymentStatus"];
 export type SetupType = StringJob["setupType"];
@@ -15,12 +17,27 @@ export type PreStretchType = StringJob["preStretchType"];
 export interface StringSetupInput {
   role: "main" | "cross";
   customerSupplied: boolean;
+  /** SportCraft Stock only — set via the string product picker, never for
+   * customer-supplied strings (brief §15/§17). */
+  stringProductId?: string | null;
   brand: string;
   stringName: string;
   gauge?: string | null;
   colour?: string | null;
   tension: string;
   tensionUnit: "kg" | "lb";
+  /** Actual string used — drives FIFO deduction for SportCraft Stock lines,
+   * optional/informational for customer-supplied ones (brief §11/§12). */
+  quantityUsed?: string | null;
+  usageUnit?: StockUnit | null;
+}
+
+export interface StockShortage {
+  role: "main" | "cross";
+  productLabel: string;
+  neededM: string;
+  availableM: string;
+  unit: StockUnit;
 }
 
 export interface ServiceInput {
@@ -62,6 +79,10 @@ function stringValues(jobId: string, strings: StringSetupInput[]) {
   return strings.map((s) => ({
     stringJobId: jobId,
     role: s.role,
+    // Customer-supplied lines never carry a product link, no matter what
+    // was passed in — this is the one place that invariant is enforced at
+    // write time (brief §15: "must never reduce SportCraft inventory").
+    stringProductId: s.customerSupplied ? null : s.stringProductId || null,
     customerSupplied: s.customerSupplied,
     brandSnapshot: s.brand.trim(),
     stringNameSnapshot: s.stringName.trim(),
@@ -69,6 +90,8 @@ function stringValues(jobId: string, strings: StringSetupInput[]) {
     colourSnapshot: s.colour?.trim() || null,
     tension: s.tension,
     tensionUnit: s.tensionUnit,
+    quantityUsed: s.quantityUsed?.trim() || null,
+    usageUnit: s.quantityUsed?.trim() ? s.usageUnit ?? "m" : null,
   }));
 }
 
@@ -129,57 +152,188 @@ export async function createJob(input: JobInput): Promise<StringJob> {
   return job;
 }
 
+function shortageFromLine(line: StringSetupInput, available: number): StockShortage {
+  const qty = Number(line.quantityUsed) || 0;
+  return { role: line.role, productLabel: `${line.brand} ${line.stringName}`.trim(), neededM: qty.toFixed(2), availableM: available.toFixed(2), unit: line.usageUnit ?? "m" };
+}
+
+/** A SportCraft-stock line that actually needs inventory deducted — a
+ * customer-supplied line, an unlinked/manual line, or a zero/blank usage
+ * never reaches FIFO allocation at all (brief §15). */
+function needsAllocation(line: StringSetupInput): line is StringSetupInput & { stringProductId: string; quantityUsed: string } {
+  return !line.customerSupplied && !!line.stringProductId && !!line.quantityUsed && Number(line.quantityUsed) > 0;
+}
+
+export type UpdateJobResult = { ok: true; job: StringJob } | { ok: false; reason: "not_found" } | { ok: false; reason: "insufficient_stock"; shortages: StockShortage[] };
+
 /** Full replace of strings/services on edit — simpler than diffing two or
  * three rows, and Phase 4's brief calls editing "relatively straightforward"
  * for now. Never touches status/completedAt/collectedAt (see
  * changeJobStatus) or the customer/racket snapshot fields — the edit form
- * doesn't let you reassign a job to a different customer or racket. */
-export async function updateJob(id: string, input: JobInput): Promise<StringJob | null> {
-  const finalPriceCents = computeFinalPriceCents(input.services, input.discountCents);
+ * doesn't let you reassign a job to a different customer or racket.
+ *
+ * Phase 5: if this job's inventory has already been processed
+ * (inventoryProcessedAt set) and a role's string/quantity actually changed,
+ * that role's existing FIFO allocation is reversed and a corrected one is
+ * made for the new quantity (brief §25) — "reverse, recalculate, re-
+ * allocate", never a silent overwrite of the deducted amount. Roles whose
+ * inventory-relevant fields are unchanged (or that were never allocated in
+ * the first place) are left untouched — editing a job's notes/dates/knots
+ * never touches inventory. */
+export async function updateJob(id: string, input: JobInput, opts?: { allowStockOverride?: boolean }): Promise<UpdateJobResult> {
+  const [existingJob] = await db.select().from(stringJobs).where(eq(stringJobs.id, id)).limit(1);
+  if (!existingJob) return { ok: false, reason: "not_found" };
 
-  const [job] = await db
-    .update(stringJobs)
-    .set({
-      setupType: input.setupType,
-      receivedOn: input.receivedOn,
-      dueOn: input.dueOn || null,
-      numberOfKnots: input.numberOfKnots ?? null,
-      preStretchType: input.preStretchType,
-      preStretchPct: input.preStretchType === "machine" ? input.preStretchPct || null : null,
-      paymentStatus: input.paymentStatus,
-      paymentMethod: input.paymentMethod || null,
-      discountCents: input.discountCents,
-      finalPriceCents,
-      generalNotes: input.generalNotes?.trim() || null,
-      stringingNotes: input.stringingNotes?.trim() || null,
-      updatedAt: new Date(),
-    })
-    .where(eq(stringJobs.id, id))
-    .returning();
-  if (!job) return null;
+  const existingLines = existingJob.inventoryProcessedAt ? await db.select().from(stringJobStrings).where(eq(stringJobStrings.stringJobId, id)) : [];
 
-  await db.delete(stringJobStrings).where(eq(stringJobStrings.stringJobId, id));
-  await db.insert(stringJobStrings).values(stringValues(id, input.strings));
+  const changedRoles = existingJob.inventoryProcessedAt
+    ? input.strings.filter((newLine) => {
+        const old = existingLines.find((l) => l.role === newLine.role);
+        if (!old) return false; // nothing to reverse — always exactly main+cross
+        return (
+          old.customerSupplied !== newLine.customerSupplied ||
+          (old.stringProductId ?? null) !== (newLine.stringProductId ?? null) ||
+          Number(old.quantityUsed ?? 0) !== (Number(newLine.quantityUsed) || 0)
+        );
+      })
+    : [];
 
-  await db.delete(stringJobServices).where(eq(stringJobServices.stringJobId, id));
-  if (input.services.length) {
-    await db.insert(stringJobServices).values(serviceValues(id, input.services));
+  if (!opts?.allowStockOverride) {
+    const shortages: StockShortage[] = [];
+    for (const line of changedRoles) {
+      if (!needsAllocation(line)) continue;
+      const { sufficient, available } = await previewStock(line.stringProductId, Number(line.quantityUsed));
+      if (!sufficient) shortages.push(shortageFromLine(line, available));
+    }
+    if (shortages.length) return { ok: false, reason: "insufficient_stock", shortages };
   }
 
-  return job;
+  const finalPriceCents = computeFinalPriceCents(input.services, input.discountCents);
+
+  const job = await db.transaction(async (tx) => {
+    for (const line of changedRoles) {
+      await reverseAllocationsForRole(tx, id, line.role, "String usage edited");
+    }
+
+    const [row] = await tx
+      .update(stringJobs)
+      .set({
+        setupType: input.setupType,
+        receivedOn: input.receivedOn,
+        dueOn: input.dueOn || null,
+        numberOfKnots: input.numberOfKnots ?? null,
+        preStretchType: input.preStretchType,
+        preStretchPct: input.preStretchType === "machine" ? input.preStretchPct || null : null,
+        paymentStatus: input.paymentStatus,
+        paymentMethod: input.paymentMethod || null,
+        discountCents: input.discountCents,
+        finalPriceCents,
+        generalNotes: input.generalNotes?.trim() || null,
+        stringingNotes: input.stringingNotes?.trim() || null,
+        updatedAt: new Date(),
+      })
+      .where(eq(stringJobs.id, id))
+      .returning();
+
+    await tx.delete(stringJobStrings).where(eq(stringJobStrings.stringJobId, id));
+    await tx.insert(stringJobStrings).values(stringValues(id, input.strings));
+
+    await tx.delete(stringJobServices).where(eq(stringJobServices.stringJobId, id));
+    if (input.services.length) {
+      await tx.insert(stringJobServices).values(serviceValues(id, input.services));
+    }
+
+    for (const line of changedRoles) {
+      if (!needsAllocation(line)) continue;
+      await allocateForRole({
+        tx,
+        stringJobId: id,
+        role: line.role,
+        stringProductId: line.stringProductId,
+        quantityNeeded: Number(line.quantityUsed),
+        unit: line.usageUnit ?? "m",
+        allowOverride: !!opts?.allowStockOverride,
+      });
+    }
+
+    return row;
+  });
+
+  return { ok: true, job };
 }
+
+export type ChangeJobStatusResult = { ok: true; job: StringJob } | { ok: false; reason: "not_found" } | { ok: false; reason: "insufficient_stock"; shortages: StockShortage[] };
 
 /** completedAt/collectedAt are set once, the moment a job first reaches that
  * status — never overwritten by a later edit or a second status change, so
- * "when was this actually finished" stays a true historical fact. */
-export async function changeJobStatus(id: string, status: JobStatus): Promise<StringJob | null> {
+ * "when was this actually finished" stays a true historical fact.
+ *
+ * Phase 5: the first time a job reaches "completed", each SportCraft-stock
+ * string line is FIFO-allocated and deducted (brief §13/§14) —
+ * inventoryProcessedAt guards this to exactly once, ever, no matter how
+ * many times status changes afterwards or how many times this is called
+ * concurrently (see the row lock below). Leaving the completed/collected
+ * pair for any other status (cancelled, or a correction moving back to an
+ * earlier status) reverses whatever was allocated (brief §24), clearing
+ * inventoryProcessedAt so a later re-completion allocates fresh. */
+export async function changeJobStatus(id: string, status: JobStatus, opts?: { allowStockOverride?: boolean }): Promise<ChangeJobStatusResult> {
   const [existing] = await db.select().from(stringJobs).where(eq(stringJobs.id, id)).limit(1);
-  if (!existing) return null;
-  const patch: { status: JobStatus; updatedAt: Date; completedAt?: Date; collectedAt?: Date } = { status, updatedAt: new Date() };
-  if (status === "completed" && !existing.completedAt) patch.completedAt = new Date();
-  if (status === "collected" && !existing.collectedAt) patch.collectedAt = new Date();
-  const [row] = await db.update(stringJobs).set(patch).where(eq(stringJobs.id, id)).returning();
-  return row ?? null;
+  if (!existing) return { ok: false, reason: "not_found" };
+
+  if (status === "completed" && existing.inventoryProcessedAt == null && !opts?.allowStockOverride) {
+    const lines = await db.select().from(stringJobStrings).where(eq(stringJobStrings.stringJobId, id));
+    const shortages: StockShortage[] = [];
+    for (const line of lines) {
+      if (line.customerSupplied || !line.stringProductId || !line.quantityUsed || Number(line.quantityUsed) <= 0) continue;
+      const { sufficient, available } = await previewStock(line.stringProductId, Number(line.quantityUsed));
+      if (!sufficient) shortages.push({ role: line.role, productLabel: `${line.brandSnapshot} ${line.stringNameSnapshot}`, neededM: Number(line.quantityUsed).toFixed(2), availableM: available.toFixed(2), unit: line.usageUnit ?? "m" });
+    }
+    if (shortages.length) return { ok: false, reason: "insufficient_stock", shortages };
+  }
+
+  try {
+    const job = await db.transaction(async (tx) => {
+      const [locked] = await tx.select().from(stringJobs).where(eq(stringJobs.id, id)).for("update");
+      if (!locked) return null;
+
+      const patch: { status: JobStatus; updatedAt: Date; completedAt?: Date; collectedAt?: Date; inventoryProcessedAt?: Date | null } = { status, updatedAt: new Date() };
+      if (status === "completed" && !locked.completedAt) patch.completedAt = new Date();
+      if (status === "collected" && !locked.collectedAt) patch.collectedAt = new Date();
+
+      const stockConsumingStatus = status === "completed" || status === "collected";
+
+      if (status === "completed" && locked.inventoryProcessedAt == null) {
+        const lines = await tx.select().from(stringJobStrings).where(eq(stringJobStrings.stringJobId, id));
+        for (const line of lines) {
+          if (line.customerSupplied || !line.stringProductId || !line.quantityUsed || Number(line.quantityUsed) <= 0) continue;
+          await allocateForRole({
+            tx,
+            stringJobId: id,
+            role: line.role,
+            stringProductId: line.stringProductId,
+            quantityNeeded: Number(line.quantityUsed),
+            unit: line.usageUnit ?? "m",
+            allowOverride: !!opts?.allowStockOverride,
+          });
+        }
+        patch.inventoryProcessedAt = new Date();
+      } else if (!stockConsumingStatus && locked.inventoryProcessedAt != null) {
+        await reverseAllocationsForRole(tx, id, "main", `Job status changed to ${status}`);
+        await reverseAllocationsForRole(tx, id, "cross", `Job status changed to ${status}`);
+        patch.inventoryProcessedAt = null;
+      }
+
+      const [row] = await tx.update(stringJobs).set(patch).where(eq(stringJobs.id, id)).returning();
+      return row;
+    });
+    if (!job) return { ok: false, reason: "not_found" };
+    return { ok: true, job };
+  } catch (err) {
+    if (err instanceof InsufficientStockError) {
+      return { ok: false, reason: "insufficient_stock", shortages: [{ role: "main", productLabel: "This string", neededM: err.needed.toFixed(2), availableM: err.available.toFixed(2), unit: "m" }] };
+    }
+    throw err;
+  }
 }
 
 export async function changePaymentStatus(id: string, paymentStatus: JobPaymentStatus): Promise<StringJob | null> {
@@ -325,19 +479,32 @@ export interface JobDetail extends StringJob {
   racket: RacketWithSpecs;
   strings: StringJobString[];
   services: StringJobService[];
+  /** Active (un-reversed) FIFO allocations only — a reversed allocation no
+   * longer contributes to this job's displayed COGS, but the row itself is
+   * never deleted (still visible in the product's own movement history). */
+  allocations: StringJobAllocation[];
+  /** Sum of any service line named "String cost" (the suggested default —
+   * see job-form-types.ts) — the closest thing to a "string revenue" figure
+   * this free-text line-item model has. 0 if no such line exists. */
+  stringRevenueCents: number;
+  stringCogsCents: number;
+  stringGrossProfitCents: number;
 }
 
 export async function getJob(id: string): Promise<JobDetail | null> {
   const [job] = await db.select().from(stringJobs).where(eq(stringJobs.id, id)).limit(1);
   if (!job) return null;
-  const [[customer], racketResult, strings, services] = await Promise.all([
+  const [[customer], racketResult, strings, services, allocations] = await Promise.all([
     db.select().from(customers).where(eq(customers.id, job.customerId)).limit(1),
     getRacket(job.customerRacketId),
     db.select().from(stringJobStrings).where(eq(stringJobStrings.stringJobId, id)),
     db.select().from(stringJobServices).where(eq(stringJobServices.stringJobId, id)),
+    db.select().from(stringJobInventoryAllocations).where(and(eq(stringJobInventoryAllocations.stringJobId, id), isNull(stringJobInventoryAllocations.reversedAt))),
   ]);
   if (!customer || !racketResult) return null;
-  return { ...job, customer, racket: racketResult.racket, strings, services };
+  const stringRevenueCents = services.filter((s) => s.serviceName.trim().toLowerCase() === "string cost").reduce((sum, s) => sum + s.totalCents, 0);
+  const stringCogsCents = allocations.reduce((sum, a) => sum + a.cogsAmountCents, 0);
+  return { ...job, customer, racket: racketResult.racket, strings, services, allocations, stringRevenueCents, stringCogsCents, stringGrossProfitCents: stringRevenueCents - stringCogsCents };
 }
 
 export interface JobHistoryRow {

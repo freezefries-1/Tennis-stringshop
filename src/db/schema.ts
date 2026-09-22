@@ -24,6 +24,7 @@ const timestamps = { createdAt: timestamp("created_at", { withTimezone: true }).
 export const customerCodeSeq = pgSequence("customer_code_seq", { startWith: 1, minValue: 1 });
 export const racketCodeSeq = pgSequence("racket_code_seq", { startWith: 1, minValue: 1 });
 export const jobCodeSeq = pgSequence("job_code_seq", { startWith: 1, minValue: 1 });
+export const batchCodeSeq = pgSequence("batch_code_seq", { startWith: 1, minValue: 1 });
 
 // -- people and their frames -------------------------------------------------
 
@@ -126,11 +127,19 @@ export const customerRackets = pgTable("customer_rackets", {
 
 // -- catalogue and stock -------------------------------------------------
 
+// Phase 5 added contactInfo/active — a lightweight supplier list (brief
+// §34: "not a full supplier management system yet"), shared by the string
+// inventory batches below and, later, Phase 6/7's products/expenses.
 export const suppliers = pgTable("suppliers", {
   id: id(),
   name: text("name").notNull(),
+  contactInfo: text("contact_info"),
+  active: boolean("active").notNull().default(true),
   notes: text("notes"),
 });
+
+// -- general retail catalogue (Phase 6 — unbuilt, kept as originally
+// stubbed in Phase 1; do not extend until Phase 6) -------------------------
 
 export const stockModeEnum = pgEnum("stock_mode", ["unit", "length"]);
 
@@ -242,11 +251,153 @@ export const stringJobs = pgTable("string_jobs", {
   // snapshots — survive edits to the customer/racket records afterwards
   racketLabel: text("racket_label").notNull(),
   customerName: text("customer_name").notNull(),
+  // Phase 5 idempotency guard: set exactly once, the moment this job's
+  // SportCraft-stock strings are FIFO-allocated and deducted (see
+  // changeJobStatus in src/lib/jobs.ts). A concurrent duplicate "mark
+  // completed" click finds this already set and skips reprocessing —
+  // one logical inventory deduction per job, no matter how many times the
+  // status changes or the page is refreshed. Cleared back to null by a
+  // reversal (e.g. cancelling a completed job), so a later re-completion
+  // allocates fresh.
+  inventoryProcessedAt: timestamp("inventory_processed_at", { withTimezone: true }),
   ...timestamps,
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 export const stringRoleEnum = pgEnum("string_role", ["main", "cross"]);
+
+// -- string inventory (Phase 5) -------------------------------------------
+//
+// A dedicated catalogue/ledger for strings, deliberately separate from the
+// `products`/`inventoryBatches`/`inventoryMovements` stub above — those are
+// Phase 1 scaffolding for Phase 6's general retail catalogue (grips, bags,
+// dampeners, ...) and stay untouched and unused until then. The Phase 5
+// brief is explicit that strings need their own structured catalogue
+// (brand/name/gauge/colour/material) distinct from a generic SKU/category
+// product row, so this builds that fresh rather than bending the Phase 6
+// stub to fit both jobs at once. stringJobStrings.stringProductId (below)
+// is the non-destructive link back to a job — same pattern as
+// customer_rackets.racket_model_id.
+
+export const stringStockUnitEnum = pgEnum("string_stock_unit", ["m", "set"]);
+
+// One row per sellable variant (brand+name+gauge+colour+material) — never
+// duplicated just because the purchase price changed; that's what batches
+// are for (brief §2/§4). trackingUnit is fixed per product (not per batch):
+// a given variant is always sold as reels-in-metres or as whole sets, never
+// mixed, which keeps "stock available" a single unambiguous number.
+export const stringProducts = pgTable("string_products", {
+  id: id(),
+  brand: text("brand").notNull(),
+  name: text("name").notNull(),
+  gauge: numeric("gauge", { precision: 3, scale: 2 }),
+  colour: text("colour"),
+  // Free text, not an enum — the brief is explicit that material categories
+  // (polyester, co-poly, multifilament, gut, ...) must never be hard-coded
+  // shut against a new one appearing.
+  material: text("material"),
+  sku: text("sku"),
+  trackingUnit: stringStockUnitEnum("tracking_unit").notNull().default("m"),
+  defaultSellingPriceCents: integer("default_selling_price_cents"),
+  // Per-product override; falls back to the global default in `settings`
+  // (key "inventory_defaults") when null.
+  lowStockThreshold: numeric("low_stock_threshold", { precision: 10, scale: 2 }),
+  notes: text("notes"),
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
+  ...timestamps,
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const inventoryBatchStatusEnum = pgEnum("inventory_batch_status", ["active", "depleted", "archived"]);
+
+// One purchase/receipt event — the FIFO costing unit (brief §6/§9). unit
+// mirrors the product's trackingUnit at receipt time (a product's tracking
+// unit isn't expected to change once batches exist against it).
+// costPerUnit is a decimal number of cents (not an integer) because a
+// per-metre rate is inherently fractional (e.g. $185/200m = 92.5¢/m) — only
+// the derived COGS/movement dollar amounts round to integer cents.
+export const stringInventoryBatches = pgTable("string_inventory_batches", {
+  id: id(),
+  batchNumber: text("batch_number")
+    .notNull()
+    .unique()
+    .default(sql`'BATCH-' || lpad(nextval('batch_code_seq')::text, 4, '0')`), // BATCH-0001
+  stringProductId: uuid("string_product_id").notNull().references(() => stringProducts.id),
+  supplierId: uuid("supplier_id").references(() => suppliers.id),
+  purchaseDate: date("purchase_date").notNull(),
+  purchaseCostCents: integer("purchase_cost_cents").notNull().default(0),
+  originalQuantity: numeric("original_quantity", { precision: 10, scale: 2 }).notNull(),
+  remainingQuantity: numeric("remaining_quantity", { precision: 10, scale: 2 }).notNull(),
+  unit: stringStockUnitEnum("unit").notNull(),
+  costPerUnitCents: numeric("cost_per_unit_cents", { precision: 12, scale: 4 }).notNull(),
+  supplierReference: text("supplier_reference"),
+  notes: text("notes"),
+  status: inventoryBatchStatusEnum("status").notNull().default("active"),
+  // Opening stock (brief §43) — a starting balance entered to get the
+  // system going, distinguishable from a real purchase receipt even though
+  // it's stored the same way (its own batch + a "received" movement).
+  isOpeningStock: boolean("is_opening_stock").notNull().default(false),
+  ...timestamps,
+});
+
+export const stringMovementTypeEnum = pgEnum("string_movement_type", [
+  "received", // stock received (incl. opening stock, flagged via the batch)
+  "string_job", // consumed by a string job
+  "manual_add",
+  "manual_deduct",
+  "wastage",
+  "correction", // stocktake correction to an exact remaining quantity
+  "reversal", // reverses an earlier movement (job edit/cancel, or a correction of a mistaken manual entry)
+]);
+
+// The append-only ledger (brief §1/§20) — current stock is always
+// sum(quantityChange) over a batch's movements, never a field the app
+// overwrites directly. Nothing here is ever edited or deleted after the
+// fact; corrections and reversals are new rows.
+export const stringInventoryMovements = pgTable("string_inventory_movements", {
+  id: id(),
+  stringProductId: uuid("string_product_id").notNull().references(() => stringProducts.id),
+  batchId: uuid("batch_id").notNull().references(() => stringInventoryBatches.id),
+  movementType: stringMovementTypeEnum("movement_type").notNull(),
+  quantityChange: numeric("quantity_change", { precision: 10, scale: 2 }).notNull(),
+  unit: stringStockUnitEnum("unit").notNull(),
+  costPerUnitCentsSnapshot: numeric("cost_per_unit_cents_snapshot", { precision: 12, scale: 4 }).notNull(),
+  stringJobId: uuid("string_job_id").references(() => stringJobs.id),
+  stringJobRole: stringRoleEnum("string_job_role"),
+  // Points at the original movement this row reverses (movementType =
+  // 'reversal' only) — lets the ledger show "+10.5m — Reversal of J0042"
+  // linked straight back to the "-10.5m — String job J0042" row it undoes.
+  reversesMovementId: uuid("reverses_movement_id"),
+  // True when this movement was allowed to push a batch/product below zero
+  // (brief §19) — an explicit, confirmed override, never silent.
+  stockOverride: boolean("stock_override").notNull().default(false),
+  reason: text("reason"),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// One row per FIFO batch consumed by one side (main/cross) of one job —
+// a hybrid job using two SportCraft strings gets two rows, one full-bed job
+// short on stock gets two rows (one per batch it drew from). Keyed by
+// (stringJobId, role) rather than a stringJobStrings row id: updateJob does
+// a full delete+reinsert of string_job_strings on every edit (see
+// src/lib/jobs.ts), which would otherwise orphan a row-id foreign key the
+// moment a job with existing allocations was edited at all. role is stable
+// across edits (a job always has exactly one main + one cross row), so it
+// survives that replace safely.
+export const stringJobInventoryAllocations = pgTable("string_job_inventory_allocations", {
+  id: id(),
+  stringJobId: uuid("string_job_id").notNull().references(() => stringJobs.id, { onDelete: "cascade" }),
+  role: stringRoleEnum("role").notNull(),
+  inventoryBatchId: uuid("inventory_batch_id").notNull().references(() => stringInventoryBatches.id),
+  quantityUsed: numeric("quantity_used", { precision: 10, scale: 2 }).notNull(),
+  costPerUnitSnapshot: numeric("cost_per_unit_snapshot", { precision: 12, scale: 4 }).notNull(),
+  cogsAmountCents: integer("cogs_amount_cents").notNull(),
+  movementId: uuid("movement_id").references(() => stringInventoryMovements.id),
+  reversedAt: timestamp("reversed_at", { withTimezone: true }),
+  ...timestamps,
+});
+
+// -- string jobs (Phase 4) -------------------------------------------------
 
 // Always exactly two rows per job — main and cross — even for a full bed,
 // where both rows snapshot the same string but keep independent tensions
@@ -260,11 +411,12 @@ export const stringJobStrings = pgTable("string_job_strings", {
   id: id(),
   stringJobId: uuid("string_job_id").notNull().references(() => stringJobs.id, { onDelete: "cascade" }),
   role: stringRoleEnum("role").notNull(),
-  // Nullable until Phase 5 builds real string inventory (see brief §33) —
-  // once it exists, backfilling this onto historical rows links them to a
-  // product without touching brandSnapshot/etc., same non-destructive-link
-  // pattern as customer_rackets.racket_model_id in Phase 3.
-  stringProductId: uuid("string_product_id").references(() => products.id),
+  // Non-destructive link to the Phase 5 string catalogue (brief §17) — set
+  // only for SportCraft Stock strings, never for customer-supplied ones.
+  // Renaming/archiving the linked product later never touches the
+  // brand/string/gauge/colour snapshots below, so a historical job stays
+  // readable exactly as it was strung.
+  stringProductId: uuid("string_product_id").references(() => stringProducts.id),
   customerSupplied: boolean("customer_supplied").notNull().default(false),
   // Structured, not one free-text field (brief §12) — and always a
   // snapshot, never a live join to a product name/price that could change.
@@ -274,6 +426,15 @@ export const stringJobStrings = pgTable("string_job_strings", {
   colourSnapshot: text("colour_snapshot"),
   tension: numeric("tension", { precision: 5, scale: 2 }).notNull(),
   tensionUnit: tensionUnitEnum("tension_unit").notNull().default("lb"),
+  // Actual string used (brief §11/§12) — required to FIFO-deduct a
+  // SportCraft Stock line; optional/informational for customer-supplied.
+  // unit is a snapshot of the linked product's trackingUnit at save time.
+  quantityUsed: numeric("quantity_used", { precision: 10, scale: 2 }),
+  usageUnit: stringStockUnitEnum("usage_unit"),
+  // True if this line was completed despite insufficient stock, via the
+  // explicit override in the job completion flow (brief §19) — surfaced on
+  // the job and in the inventory movement it produced, never silent.
+  stockOverride: boolean("stock_override").notNull().default(false),
 });
 
 // Line items — stringing labour, string charge, grip replacement, and any
