@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { createRacket, getRacket, linkRacketToModel, updateRacket, type RacketInput } from "@/lib/rackets";
+import { createRacket, getRacket, linkRacketToModel, setRacketArchived, updateRacket, type RacketInput } from "@/lib/rackets";
 import { createModel, findDuplicateModel, racketLabelParts, type RacketModelInput } from "@/lib/racket-catalogue";
 import { quickCreateBrand, quickCreateSeries } from "@/components/customers/racket-picker-actions";
 import { racketLabel } from "@/lib/racket-label";
@@ -166,4 +166,13 @@ export async function linkRacketToExistingModelAction(customerId: string, racket
   const row = await linkRacketToModel(racketId, modelId);
   if (!row) return { status: "error", message: "Racket not found." };
   return afterLink(customerId, racketId, modelId);
+}
+
+// -- archiving a customer racket (removes it from the customer's active
+// portfolio and from racket selectors, without deleting its history) -------
+
+export async function archiveRacketAction(customerId: string, racketId: string, archived: boolean) {
+  await setRacketArchived(racketId, archived);
+  revalidatePath(`/customers/${customerId}`);
+  revalidatePath(`/customers/${customerId}/rackets/${racketId}`);
 }

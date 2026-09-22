@@ -94,14 +94,14 @@ const modelJoin = {
   seriesName: racketSeries.name,
 };
 
-export async function listRacketsForCustomer(customerId: string): Promise<RacketWithSpecs[]> {
+export async function listRacketsForCustomer(customerId: string, includeArchived = false): Promise<RacketWithSpecs[]> {
   const rows = await db
     .select({ racket: customerRackets, ...modelJoin })
     .from(customerRackets)
     .leftJoin(racketModels, eq(racketModels.id, customerRackets.racketModelId))
     .leftJoin(racketSeries, eq(racketSeries.id, racketModels.seriesId))
     .leftJoin(racketBrands, eq(racketBrands.id, racketSeries.brandId))
-    .where(and(eq(customerRackets.customerId, customerId), isNull(customerRackets.archivedAt)))
+    .where(and(eq(customerRackets.customerId, customerId), includeArchived ? undefined : isNull(customerRackets.archivedAt)))
     .orderBy(asc(customerRackets.code));
   return rows.map((r) => withEffectiveSpecs(r.racket, r.model, r.brandName, r.seriesName));
 }
@@ -164,5 +164,18 @@ export async function updateRacket(id: string, input: RacketInput) {
  * when the edit form's mode is switched to "database"). */
 export async function linkRacketToModel(id: string, racketModelId: string): Promise<CustomerRacket | null> {
   const [row] = await db.update(customerRackets).set({ racketModelId }).where(eq(customerRackets.id, id)).returning();
+  return row ?? null;
+}
+
+/** Archiving (not deleting) a customer racket, same reasoning as brands/
+ * series/racket_models: it drops off the customer's racket list and racket
+ * selectors but the row — and anything that ends up referencing it, like
+ * Phase 4's string job history — stays intact and can be unarchived. */
+export async function setRacketArchived(id: string, archived: boolean): Promise<CustomerRacket | null> {
+  const [row] = await db
+    .update(customerRackets)
+    .set({ archivedAt: archived ? new Date() : null })
+    .where(eq(customerRackets.id, id))
+    .returning();
   return row ?? null;
 }

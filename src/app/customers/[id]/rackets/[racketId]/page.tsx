@@ -6,6 +6,7 @@ import { Button } from "@/components/ds/button";
 import { IconButton } from "@/components/ds/icon-button";
 import { SpecList, type SpecListItem } from "@/components/ds/spec-list";
 import { PromoteRacketButton } from "@/components/customers/promote-racket-button";
+import { ArchiveRacketButton } from "@/components/customers/archive-racket-button";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +61,11 @@ export default async function RacketProfilePage({ params }: { params: Promise<{ 
               </>
             ) : null}
           </div>
+          {racket.archivedAt ? (
+            <div className="row-s" style={{ marginTop: 4, color: "var(--signal-warning)" }}>
+              Archived
+            </div>
+          ) : null}
         </div>
         <div className="profile-actions">
           {!racket.linkedModel ? <PromoteRacketButton customerId={id} racketId={racketId} /> : null}
@@ -71,6 +77,7 @@ export default async function RacketProfilePage({ params }: { params: Promise<{ 
           <Link href={`/customers/${id}/rackets/${racketId}/edit`}>
             <IconButton icon="pencil" label="Edit racket" variant="outline" size="sm" />
           </Link>
+          <ArchiveRacketButton customerId={id} racketId={racketId} archived={!!racket.archivedAt} />
         </div>
       </div>
 

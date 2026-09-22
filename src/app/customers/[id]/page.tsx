@@ -16,7 +16,7 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
   const customer = await getCustomer(id);
   if (!customer) notFound();
 
-  const [stats, rackets] = await Promise.all([getCustomerStats(id), listRacketsForCustomer(id)]);
+  const [stats, rackets] = await Promise.all([getCustomerStats(id), listRacketsForCustomer(id, true)]);
 
   const items: SpecListItem[] = [
     { label: "Phone", value: customer.phone },
