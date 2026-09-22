@@ -131,11 +131,18 @@ a.nav-i:hover,a.mnav-i:hover,a.sheet-i:hover,a.row:hover{color:var(--ink-700);bo
 .ccard-top{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
 .ccard-name{font-size:15px;font-weight:500;color:var(--ink-900)}
 .ccard-meta{display:flex;flex-wrap:wrap;gap:6px 14px}
-.ccard-stats{display:flex;justify-content:space-between;gap:12px;padding-top:10px;border-top:1px solid var(--ink-100)}
-.ccard-stat{display:flex;flex-direction:column;gap:3px}
+/* Grid, not a non-wrapping flex row — .ccards only ever renders below the
+   760px breakpoint, so this never affects desktop, but a plain flex row
+   with several stats (the Jobs card has 5: Received, Due, Price, Payment,
+   Status) doesn't reliably fit on one line at real phone widths — 414/428/
+   430px CSS-px iPhones are all wider than a narrow "mobile" breakpoint like
+   420px would catch, so the last item(s) got squeezed and visually clipped
+   at the screen edge instead of wrapping. A fixed 2-column grid wraps
+   deterministically regardless of exact viewport width or item count. */
+.ccard-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px;padding-top:10px;border-top:1px solid var(--ink-100)}
+.ccard-stat{display:flex;flex-direction:column;gap:3px;min-width:0}
 .rec-empty{padding:48px 24px;text-align:center;color:var(--ink-400);font-size:14.5px}
 @media(max-width:760px){.dtable-wrap{display:none}.ccards{display:flex}.rec-tools{flex-wrap:wrap}.rec-tools .search{flex:1 0 100%;max-width:none}}
-@media(max-width:420px){.ccard-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px}}
 
 /* forms */
 .form{display:flex;flex-direction:column;gap:20px;max-width:640px}
