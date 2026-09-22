@@ -1,0 +1,11 @@
+/* Webfonts. NOTE: no brand font binaries were supplied; these are the nearest
+   Google Fonts matches, loaded from the Google Fonts CDN.
+   Space Grotesk = technical/engineered display. Archivo = neutral grotesque workhorse.
+   IBM Plex Mono = specification + numeric data. */
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap");
+
+:root{
+  --font-display:"Space Grotesk","Archivo",system-ui,sans-serif;
+  --font-body:"Archivo",system-ui,sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,monospace;
+}

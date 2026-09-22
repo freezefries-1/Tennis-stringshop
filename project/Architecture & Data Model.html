@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SportCraft — architecture and data model</title>
+<link rel="stylesheet" href="_ds/sportcraft-design-system-1803c2a9-3a3c-4732-aadf-c605d1f21fa4/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/sportcraft-design-system-1803c2a9-3a3c-4732-aadf-c605d1f21fa4/tokens/colors.css">
+<link rel="stylesheet" href="_ds/sportcraft-design-system-1803c2a9-3a3c-4732-aadf-c605d1f21fa4/tokens/typography.css">
+<link rel="stylesheet" href="_ds/sportcraft-design-system-1803c2a9-3a3c-4732-aadf-c605d1f21fa4/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/sportcraft-design-system-1803c2a9-3a3c-4732-aadf-c605d1f21fa4/tokens/elevation.css">
+<link rel="stylesheet" href="_ds/sportcraft-design-system-1803c2a9-3a3c-4732-aadf-c605d1f21fa4/tokens/motion.css">
+<link rel="stylesheet" href="_ds/sportcraft-design-system-1803c2a9-3a3c-4732-aadf-c605d1f21fa4/tokens/base.css">
+<link rel="stylesheet" href="_ds/sportcraft-design-system-1803c2a9-3a3c-4732-aadf-c605d1f21fa4/styles.css">
+<style>
+body{margin:0;background:var(--paper-050);color:var(--ink-900);font-family:"Archivo",system-ui,sans-serif;font-size:15px;line-height:1.6}
+.wrap{max-width:900px;margin:0 auto;padding:40px 24px 96px}
+h1{font-family:"Space Grotesk",sans-serif;font-weight:600;font-size:clamp(30px,5vw,44px);letter-spacing:-0.022em;line-height:1.08;margin:0 0 12px}
+h2{font-family:"Space Grotesk",sans-serif;font-weight:600;font-size:clamp(21px,3vw,27px);letter-spacing:-0.016em;margin:64px 0 4px}
+h3{font-family:"Space Grotesk",sans-serif;font-weight:600;font-size:17px;letter-spacing:-0.008em;margin:32px 0 8px}
+p{margin:0 0 14px;text-wrap:pretty;color:var(--ink-700)}
+.lab{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-400)}
+.rule{height:1px;background:var(--ink-100);margin:18px 0 0}
+ul,ol{margin:0 0 14px;padding-left:20px;color:var(--ink-700)}
+li{margin:0 0 7px;text-wrap:pretty}
+code,.mono{font-family:"IBM Plex Mono",monospace;font-size:0.88em;font-variant-numeric:tabular-nums}
+code{background:var(--paper-100);border-radius:3px;padding:1px 4px;color:var(--ink-800)}
+pre{background:var(--ink-900);color:#DCEAE3;border-radius:8px;padding:20px;overflow-x:auto;font-family:"IBM Plex Mono",monospace;font-size:12.5px;line-height:1.65;margin:0 0 16px}
+pre b{color:var(--optic-400);font-weight:400}
+pre i{color:var(--ink-300);font-style:normal}
+.card{background:var(--paper-000);border:1px solid var(--ink-100);border-radius:8px;box-shadow:var(--shadow-1);padding:24px;margin:0 0 16px}
+.card.sunk{background:var(--paper-100);box-shadow:none;border-color:var(--ink-100)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin:0 0 16px}
+table{width:100%;border-collapse:collapse;margin:0 0 16px;font-size:14px}
+th{text-align:left;font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-400);font-weight:400;padding:8px 12px 8px 0;border-bottom:1px solid var(--ink-100);vertical-align:bottom}
+td{padding:10px 12px 10px 0;border-bottom:1px solid var(--ink-100);vertical-align:top;color:var(--ink-700)}
+td:first-child{color:var(--ink-900)}
+.band{background:var(--court-900);color:var(--paper-050);border-radius:12px;padding:32px;margin:32px 0}
+.band h3{color:var(--paper-000);margin-top:0}
+.band p,.band li{color:#AFCCC0}
+.band .lab{color:var(--optic-400)}
+.flag{display:inline-block;font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;border-radius:3px;padding:2px 6px;margin-right:8px;vertical-align:1px}
+.flag.fix{background:var(--signal-danger-bg);color:var(--signal-danger)}
+.flag.ask{background:var(--signal-warning-bg);color:var(--signal-warning)}
+.flag.ok{background:var(--signal-success-bg);color:var(--signal-success)}
+.toc{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:2px 24px;margin:24px 0 0}
+.toc a{display:flex;gap:10px;padding:7px 0;border-top:1px solid var(--ink-100);font-size:14px;text-decoration:none;color:var(--ink-700)}
+.toc a:hover{color:var(--court-800)}
+.toc span{font-family:"IBM Plex Mono",monospace;color:var(--ink-300);font-size:12px}
+a{color:var(--court-600)}
+a:hover{color:var(--court-800)}
+.phase{display:grid;grid-template-columns:64px minmax(0,1fr);gap:0 20px;border-top:1px solid var(--ink-100);padding:16px 0}
+.phase b{font-family:"Space Grotesk",sans-serif;font-size:15px;font-weight:600;display:block;margin-bottom:4px}
+.pn{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--court-600);padding-top:2px}
+.phase p{margin:0;font-size:14px}
+.phase .db{font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--ink-400);margin-top:6px;display:block}
+@media(max-width:560px){.phase{grid-template-columns:1fr;gap:4px}.wrap{padding:28px 18px 64px}pre{font-size:11px;padding:14px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="lab">SportCraft · workshop platform</div>
+<h1>Architecture and data model</h1>
+<p style="font-size:17px;color:var(--ink-600);max-width:64ch">A review of the brief before any application code is written: what contradicts, what the database should look like, how string jobs and sales can share one revenue ledger without counting money twice, and what gets built in each of the ten phases.</p>
+<div class="toc">
+<a href="#review"><span>01</span>Stack review</a>
+<a href="#problems"><span>02</span>Contradictions and gaps</a>
+<a href="#schema"><span>03</span>Database schema</a>
+<a href="#relations"><span>04</span>Relationships</a>
+<a href="#revenue"><span>05</span>Revenue without double-counting</a>
+<a href="#costing"><span>06</span>Reel costing over time</a>
+<a href="#nav"><span>07</span>Navigation, desktop and phone</a>
+<a href="#phases"><span>08</span>Phase plan</a>
+</div>
+
+<h2 id="review">01 · Stack review</h2>
+<p>Your proposed stack is sound. Next.js + TypeScript + Tailwind + Supabase Postgres is the right weight for this: one person, one shop, a few thousand rows a year, accessed from a bench computer and a phone. It gives you a managed database with automatic backups, a hosted URL you can open on the iPhone, and a codebase Claude can keep working in. I would keep it, with three changes.</p>
+<div class="grid2">
+<div class="card"><div class="lab">Keep</div><div class="rule"></div>
+<ul style="margin-top:14px">
+<li><b>Next.js App Router</b> on Vercel — server components and server actions mean no separate API layer to maintain.</li>
+<li><b>Supabase Postgres</b> — you need real relational integrity and point-in-time backups. SQLite on a single box would be simpler but backup and phone access get worse, not better.</li>
+<li><b>Tailwind</b>, with the SportCraft tokens mapped into <code>tailwind.config</code> so the design system is the palette.</li>
+</ul></div>
+<div class="card"><div class="lab">Change</div><div class="rule"></div>
+<ul style="margin-top:14px">
+<li><b>Drop the ORM abstraction debate — use Drizzle.</b> Typed SQL, migrations in the repo, no hidden query behaviour. Prisma's client generation step is friction you do not need.</li>
+<li><b>Skip Supabase Auth, but do not skip the front door.</b> See the flag below.</li>
+<li><b>No state library, no React Query at first.</b> Server components fetch; server actions mutate; <code>revalidatePath</code> refreshes. Add client caching only where the POS proves it needs it.</li>
+</ul></div>
+</div>
+<div class="card sunk"><span class="flag fix">Must fix</span><b>"No authentication" cannot mean "no lock".</b>
+<p style="margin:10px 0 0">A public Vercel URL holding customer phone numbers and your P&amp;L is a real risk, and Singapore's PDPA applies to customer contact data regardless of business size. You do not need accounts, roles, or a login system — you need one gate. Cheapest option that satisfies the brief: <b>Vercel Deployment Protection</b> (password on the whole deployment, zero code). Next cheapest: a single shared passcode checked in middleware, stored as an env var, set in an httpOnly cookie for 90 days. Either is about an hour of work and neither adds a users table.</p></div>
+
+<h2 id="problems">02 · Contradictions, gaps and traps</h2>
+<table>
+<thead><tr><th style="width:96px">Issue</th><th>What the brief says, and what I propose</th></tr></thead>
+<tbody>
+<tr><td>Tension units</td><td>Section 6 shows <span class="mono">50 lbs</span>, the design system shows <span class="mono">24 / 23 kg</span>. Store tension as <code>numeric</code> plus a <code>unit</code> enum per job, canonicalise to kg in a generated column for analytics, and set a display default in Settings. Never convert on write.</td></tr>
+<tr><td>Strings are two things</td><td>Strings appear under both Products (section 11: "string reels", "string sets") and String Inventory (section 8). Two tables would desync. <b>One <code>products</code> table</b> with <code>stock_mode = 'unit' | 'length'</code>; length-mode products carry gauge, colour, material and reel length and are the only ones consumable by a string job.</td></tr>
+<tr><td>Racket IDs</td><td>Your example numbers rackets <span class="mono">R001–R003</span> per customer. Per-customer numbering breaks as soon as you merge duplicate customers. Use a global sequence (<span class="mono">R-0417</span>) and show a per-customer position in the UI if you want it.</td></tr>
+<tr><td>Inventory as expense</td><td>Flagged in your own section 16, and it is the single easiest way to wreck the numbers. Resolution below in §05 — stock purchases are never operating expenses.</td></tr>
+<tr><td>Discounts</td><td>Discount exists on the string job (section 6) and on the POS sale (section 12). If both apply you can discount twice. <b>Discount lives on the sale only</b>; the job carries list charges.</td></tr>
+<tr><td>Customer string</td><td>When <code>string_supplied_by_customer</code> is true there is no inventory deduction and no string COGS — only labour revenue. Needs to be enforced in the mutation, not left to the operator.</td></tr>
+<tr><td>Hybrid usage</td><td>A hybrid using the same reel for mains and crosses must deduct twice from one batch, not fail a uniqueness assumption. Model usage as <i>n</i> rows, not two fixed columns.</td></tr>
+<tr><td>Sets vs metres</td><td>A string set sold over the counter is a unit sale. A set <i>used</i> in a job is 1 unit, not 11 m. Both paths must exist; only reels use metres.</td></tr>
+<tr><td>Job price vs sale price</td><td>Section 6 gives the job a "final price"; section 13 says the POS must not duplicate it. Treat job pricing as a <b>quote</b>; the sale is the only money record.</td></tr>
+<tr><td>"Last visit"</td><td>Derived, never stored — it is <code>max()</code> of sale and job dates. Same for lifetime spend, job count, average tension. A stored copy will drift.</td></tr>
+<tr><td>Racket catalogue</td><td>Section 5's <span class="mono">Brand → Series → Model → Generation</span> is four levels, but head size and pattern only exist at generation level. Model the first three as lookup rows and put specs on <code>racket_models</code> (the generation row). Archive, never delete — customer rackets point at it.</td></tr>
+<tr><td>Returns</td><td>Section 26 asks for correct handling but no mechanism is specified. Never edit or delete a sale: post a <b>reversing sale</b> with negative quantities linked by <code>reverses_sale_id</code>. Inventory movements reverse with it.</td></tr>
+</tbody>
+</table>
+<div class="card sunk"><span class="flag ask">Need your call</span><b>Three decisions I cannot make for you.</b>
+<ol style="margin:10px 0 0">
+<li><b>GST.</b> If SportCraft is GST-registered, tax has to be in the schema from day one — retrofitting it into historical sales is painful. Say so now and I will add <code>tax_rate</code> and <code>tax_amount</code> snapshots to sale items.</li>
+<li><b>Deposits.</b> Do you ever take payment before a job is collected? If yes, the sale and the collection are separate events and payment status needs a partial state.</li>
+<li><b>Historic Sheets data.</b> Do your existing rows have real costs per reel, or only selling prices? If cost history is missing, imported jobs get a null COGS and reports need to say so rather than quietly showing 100% margin.</li>
+</ol></div>
+
+<h2 id="schema">03 · Database schema</h2>
+<p>Fifteen tables. Money is stored as integer cents, lengths as <code>numeric(10,2)</code> metres, all timestamps <code>timestamptz</code>. Everything user-facing gets a short human ID (<span class="mono">SC-1042</span>, <span class="mono">R-0417</span>) alongside the uuid primary key.</p>
+<pre><i>-- people and their frames</i>
+<b>customers</b>          id · code <i>C-0231</i> · name · phone · email · notes · created_at · archived_at
+<b>racket_brands</b>      id · name · archived_at
+<b>racket_series</b>      id · brand_id→racket_brands · name · archived_at
+<b>racket_models</b>      id · series_id→racket_series · model · generation_year
+                    head_size_sqin · string_pattern · unstrung_weight_g · notes · archived_at
+<b>customer_rackets</b>   id · code <i>R-0417</i> · customer_id→customers · racket_model_id→racket_models
+                    grip_size · static_weight_g · swingweight · balance_mm
+                    customisation_notes · notes · archived_at
+                    <i>two identical frames = two rows, same racket_model_id</i>
+
+<i>-- catalogue and stock</i>
+<b>suppliers</b>          id · name · notes
+<b>products</b>           id · sku · name · brand · category · variant · supplier_id
+                    stock_mode <i>'unit' | 'length'</i> · unit_label <i>set | reel | pcs</i>
+                    sell_price_cents · reorder_level · active · notes
+                    <i>length-mode only:</i> gauge_mm · colour · material · reel_length_m
+<b>inventory_batches</b>  id · product_id→products · received_at · supplier_id
+                    qty_received · qty_remaining · unit_cost_cents
+                    <i>unit_cost is per metre for reels, per unit otherwise</i>
+<b>inventory_movements</b> id · product_id · batch_id→inventory_batches · occurred_at
+                    qty_delta <i>signed</i> · unit_cost_cents <i>snapshot</i>
+                    movement_type <i>purchase|sale|string_job|adjustment|return|write_off</i>
+                    ref_table · ref_id · notes
+
+<i>-- work and money</i>
+<b>string_jobs</b>        id · code <i>SC-1042</i> · customer_id · customer_racket_id
+                    received_at · due_at · completed_at · collected_at
+                    status <i>received|waiting|in_progress|completed|collected</i>
+                    tension_unit <i>kg|lb</i> · pre_stretch_pct · customer_supplied_string
+                    labour_charge_cents · additional_charges_cents · notes
+                    <i>snapshots:</i> racket_label · customer_name
+<b>string_job_strings</b> id · string_job_id · role <i>main|cross</i>
+                    product_id · batch_id · length_used_m · tension
+                    <i>one row for a full bed (role 'main'), two for a hybrid</i>
+<b>sales</b>              id · code <i>S-0884</i> · occurred_at · customer_id <i>nullable</i>
+                    subtotal_cents · discount_cents · total_cents
+                    payment_method <i>paynow|cash|transfer|card|other</i>
+                    payment_status <i>paid|unpaid</i> · reverses_sale_id · notes
+<b>sale_items</b>         id · sale_id→sales · line_type <i>product|string_job|service</i>
+                    product_id <i>nullable</i> · string_job_id <i>nullable, UNIQUE</i>
+                    description <i>snapshot</i> · qty · unit_price_cents
+                    line_total_cents · cogs_cents <i>snapshot</i> · revenue_category
+<b>expenses</b>           id · incurred_on · category_id→expense_categories · supplier_id
+                    description · amount_cents · payment_method · notes
+<b>expense_categories</b> id · name · is_inventory <i>excluded from opex</i> · archived_at
+<b>settings</b>           key · value <i>jsonb — business name, currency, default labour,</i>
+                    <i>default usage m, statuses, payment methods, thresholds</i></pre>
+<p><b>The snapshot rule.</b> Every column marked <i>snapshot</i> is written once at transaction time and never recomputed: <code>sale_items.description</code>, <code>sale_items.unit_price_cents</code>, <code>sale_items.cogs_cents</code>, <code>inventory_movements.unit_cost_cents</code>, <code>string_jobs.racket_label</code>. Editing a product's price, a customer's name or a racket's specs afterwards changes nothing historical. Reports read snapshots, never joins to current catalogue prices.</p>
+
+<h2 id="relations">04 · How the tables relate</h2>
+<pre>customers ─┬─&lt; customer_rackets ─&gt;─ racket_models ─&gt;─ racket_series ─&gt;─ racket_brands
+           │         │
+           │         └──&lt; string_jobs ──&lt; string_job_strings ─&gt;─ products
+           │                  │                                      │
+           │                  │ 0..1                                 │
+           └──&lt; sales ──&lt; sale_items ────────────────────────────────┘
+                                 │
+products ──&lt; inventory_batches ──&lt; inventory_movements
+                                        ▲
+                     ref_id points back to a sale or a string_job</pre>
+<ul>
+<li>A <b>customer</b> has many rackets, jobs and sales. A sale may have no customer (walk-in).</li>
+<li>A <b>customer racket</b> has many string jobs — that is its service history. It points at a catalogue <b>racket model</b> for specs, so two identical frames are two rows pointing at the same model.</li>
+<li>A <b>string job</b> has one or two <b>string_job_strings</b> rows, each naming the product, the batch it came from and the metres used.</li>
+<li>A <b>string job</b> has <b>at most one</b> sale item (<code>UNIQUE(string_job_id)</code>). That constraint is what makes double-billing impossible at the database level, not just in the UI.</li>
+<li>Every stock change is an <b>inventory movement</b> row against a <b>batch</b>. Quantity on hand is <code>sum(qty_delta)</code>, not a stored field.</li>
+</ul>
+
+<h2 id="revenue">05 · String jobs, sales, COGS and inventory — one revenue ledger</h2>
+<div class="band">
+<div class="lab">The rule</div>
+<h3 style="margin-top:8px">A string job is a work order. It is not money. Revenue exists only in <span style="font-family:'IBM Plex Mono',monospace;font-size:0.82em;color:#D6F25B">sale_items</span>.</h3>
+<p style="margin-bottom:0">Every report that says "revenue" sums <code style="background:rgba(255,255,255,.08);color:#DCEAE3">sale_items.line_total_cents</code>. Every report that says "COGS" sums <code style="background:rgba(255,255,255,.08);color:#DCEAE3">sale_items.cogs_cents</code>. Nothing else is ever added. A job with no sale item is unbilled work, and the dashboard should show that number — it is the most useful error report you will have.</p>
+</div>
+<h3>The flow</h3>
+<ol>
+<li><b>Job created.</b> Strings and tensions recorded. Quoted price computed from labour + string charge + services, but nothing is posted.</li>
+<li><b>Job marked completed.</b> Now string is physically used, so inventory moves: one <code>inventory_movements</code> row per <code>string_job_strings</code> row, <code>movement_type = 'string_job'</code>, <code>ref_id = job.id</code>, negative metres, consuming the oldest open batch. Each row snapshots that batch's <code>unit_cost_cents</code>. Their sum is the job's string COGS. Still no revenue.</li>
+<li><b>Job charged at the POS.</b> The job appears in the POS as a pending line. Adding it creates one <code>sale_item</code> with <code>line_type = 'string_job'</code>, <code>string_job_id</code> set, <code>cogs_cents</code> = the sum from step 2. Other items (overgrips, a reel, a paddle) are ordinary product lines on the same sale, each consuming their own batches and snapshotting their own cost.</li>
+<li><b>Sale completed.</b> Payment method recorded. Marking the job <i>collected</i> is a separate status change that posts nothing.</li>
+</ol>
+<h3>Why this cannot double-count</h3>
+<ul>
+<li>The unique constraint on <code>sale_items.string_job_id</code> means a job can be charged exactly once, ever. A second attempt is a database error, not a duplicate row.</li>
+<li>Job prices are never summed by any report. If you change a job's labour charge after it is billed, the sale is untouched — which is correct, and visible as a variance if you want to report on it.</li>
+<li>Inventory moves at completion, revenue posts at sale. They are separately traceable, so a job that used string but was never charged shows up in both the "unbilled jobs" list and a gross-margin check.</li>
+</ul>
+<h3>And the inventory-vs-expense trap</h3>
+<p>Buying stock is not an expense — it converts cash into inventory. It becomes COGS only when the item is sold. So: <b>stock purchases are entered through Receive stock, which writes an <code>inventory_batch</code>. They are never entered in Expenses.</b> The Expenses section keeps its "Inventory" category for things like packaging or a bulk consumable you do not track as stock, and that category is flagged <code>is_inventory = true</code> so it is excluded from operating expenses in the P&amp;L. If you record a reel purchase in both places, net profit is understated by the cost of the reel, twice.</p>
+<div class="card"><div class="lab">Worked example · one visit</div><div class="rule" style="margin-bottom:16px"></div>
+<table style="margin:0"><thead><tr><th>Line</th><th style="text-align:right">Revenue</th><th style="text-align:right">COGS</th><th style="text-align:right">Gross</th></tr></thead><tbody>
+<tr><td>String job SC-1042 · Hyper-G 1.25, 11.0 m from batch B-07 @ $0.90/m</td><td class="mono" style="text-align:right">35.00</td><td class="mono" style="text-align:right">9.90</td><td class="mono" style="text-align:right">25.10</td></tr>
+<tr><td>Overgrip × 3 @ $3.00, cost $1.20</td><td class="mono" style="text-align:right">9.00</td><td class="mono" style="text-align:right">3.60</td><td class="mono" style="text-align:right">5.40</td></tr>
+<tr><td>Dampener × 1</td><td class="mono" style="text-align:right">5.00</td><td class="mono" style="text-align:right">1.80</td><td class="mono" style="text-align:right">3.20</td></tr>
+<tr style="border-top:1.5px solid var(--ink-700)"><td style="font-weight:500">Sale S-0884 · PayNow</td><td class="mono" style="text-align:right;font-weight:500">49.00</td><td class="mono" style="text-align:right;font-weight:500">15.30</td><td class="mono" style="text-align:right;font-weight:500">33.70</td></tr>
+</tbody></table>
+<p style="margin:14px 0 0;font-size:13.5px;color:var(--ink-500)">One sale, three items, one of which is the job. The job contributes $35 once. Net operating profit subtracts only <i>expenses</i> — rent, machine service, software — never the $180 you paid for the reel.</p></div>
+
+<h2 id="costing">06 · Buying the same string at different prices</h2>
+<p>Use <b>batch-level FIFO</b>. Every receipt of stock creates an <code>inventory_batches</code> row with its own <code>unit_cost_cents</code> and its own remaining quantity. Consumption walks the oldest open batch first and records which batch it took from.</p>
+<pre>Hyper-G 1.25 green
+  B-07  12 Mar  200 m @ $180  →  $0.90 / m   <i>qty_remaining 0.0</i>
+  B-11  02 Jun  200 m @ $196  →  $0.98 / m   <i>qty_remaining 137.5</i>
+
+  SC-1042  11.0 m  from B-07  →  COGS $9.90   <i>stays $9.90 forever</i>
+  SC-1118  11.0 m  from B-11  →  COGS $10.78
+  SC-1119  11.0 m  spanning   →  4.0 m B-07 @0.90 + 7.0 m B-11 @0.98 = $10.46</pre>
+<h3>Why FIFO and not weighted average</h3>
+<ul>
+<li><b>It matches the physical reality.</b> You finish the reel on the machine before opening the next one. FIFO is what actually happens at the bench; weighted average is a fiction you would have to maintain.</li>
+<li><b>Per-job cost stays explainable.</b> "This job cost $9.90 because it came off the March reel" is auditable a year later. A moving average cannot be reconstructed without replaying every purchase.</li>
+<li><b>Nothing rewrites history.</b> A weighted-average system recalculates the average on every purchase, which is exactly the "changing cost corrupts old profits" failure your brief calls out.</li>
+<li><b>The complexity is small.</b> One extra table and a consume-from-batches function. Reporting "inventory value" becomes <code>sum(qty_remaining × unit_cost_cents)</code>, which is also more accurate than an averaged figure.</li>
+</ul>
+<p>Two details. <b>Spanning batches</b>: when a job needs more than the oldest batch holds, split it into two movement rows — the schema already allows that since movements are per batch. <b>Reel offcuts</b>: a reel that runs out at 4 m remaining leaves a stub; add a <code>write_off</code> movement so inventory value does not carry unusable string. One click from the stock screen.</p>
+
+<h2 id="nav">07 · Navigation</h2>
+<div class="grid2">
+<div class="card"><div class="lab">Desktop · 248px sidebar</div><div class="rule" style="margin-bottom:14px"></div>
+<p style="font-size:13.5px">Eleven flat sections is too many to scan. Grouped into four, with the daily three at the top:</p>
+<table style="margin:0;font-size:13.5px"><tbody>
+<tr><td style="padding-left:0"><span class="lab">Bench</span></td><td>Dashboard · String jobs · POS</td></tr>
+<tr><td><span class="lab">People</span></td><td>Customers · Rackets</td></tr>
+<tr><td><span class="lab">Stock</span></td><td>Inventory · Products · Racket database</td></tr>
+<tr><td><span class="lab">Money</span></td><td>Expenses · Reports</td></tr>
+</tbody></table>
+<p style="font-size:13.5px;margin:14px 0 0">Settings sits in the sidebar footer. Live counts ride on String jobs (open) and Inventory (low stock). Global search is a 60px top-bar field, <code>⌘K</code> from anywhere.</p></div>
+<div class="card"><div class="lab">iPhone</div><div class="rule" style="margin-bottom:14px"></div>
+<p style="font-size:13.5px">A five-slot bottom tab bar covering what you actually do standing up, with everything else behind <i>More</i>:</p>
+<p class="mono" style="font-size:12.5px;color:var(--ink-700);background:var(--paper-100);border-radius:5px;padding:12px;margin:0 0 14px">Jobs · Customers · <b style="color:var(--court-700)">New</b> · POS · More</p>
+<ul style="font-size:13.5px;margin:0">
+<li><b>New</b> is a centre action, not a screen: new job, new customer, new sale, receive stock.</li>
+<li>Search is a persistent field at the top of Jobs and Customers, not a hidden icon — you use it while talking.</li>
+<li>Tables become stacked rows: primary line, mono metadata line, status badge right. No horizontal scrolling anywhere.</li>
+<li>Status changes are a tap on the row, not a form.</li>
+<li>Reports and imports are desktop-first and say so on a phone rather than cramming.</li>
+</ul></div>
+</div>
+
+<h2 id="phases">08 · Implementation plan</h2>
+<p>Each phase ends with a test checklist you can run in ten minutes. Nothing moves on until the previous phase survives it.</p>
+<div class="phase"><div class="pn">01</div><div><b>Foundation</b><p>Next.js + Drizzle + Supabase, tokens mapped to Tailwind, app shell, responsive navigation, dashboard laid out against seed data. Passcode gate.</p><span class="db">DB · all tables migrated empty, settings seeded</span></div></div>
+<div class="phase"><div class="pn">02</div><div><b>Customers</b><p>List, create, edit, archive. Profile with derived stats. Search by name, phone, ID. Customer rackets CRUD attached to the profile.</p><span class="db">DB · customers, customer_rackets</span></div></div>
+<div class="phase"><div class="pn">03</div><div><b>Racket database</b><p>Brand/series/model management, dependent searchable selects, archive. Backfill from your existing frames so phase 2 rackets get linked.</p><span class="db">DB · racket_brands, racket_series, racket_models</span></div></div>
+<div class="phase"><div class="pn">04</div><div><b>String jobs</b><p>Job creation with customer-filtered racket select, full bed and hybrid, statuses, last-setup panel and Repeat previous setup. No inventory or money yet — jobs record work.</p><span class="db">DB · string_jobs, string_job_strings</span></div></div>
+<div class="phase"><div class="pn">05</div><div><b>String inventory</b><p>Length-mode products, receive stock, batches, FIFO consumption on job completion, movements ledger, per-job COGS. Negative-stock guard with explicit override.</p><span class="db">DB · products, inventory_batches, inventory_movements</span></div></div>
+<div class="phase"><div class="pn">06</div><div><b>Products and POS</b><p>Unit-mode catalogue, POS with customer-optional carts, pending job lines, discounts, payment methods, reversing sales. The unique constraint goes in here.</p><span class="db">DB · sales, sale_items, unique(sale_items.string_job_id)</span></div></div>
+<div class="phase"><div class="pn">07</div><div><b>Finance</b><p>Expenses and categories, the P&amp;L query, date-range and category filters, the inventory/opex exclusion rule made visible in the UI.</p><span class="db">DB · expenses, expense_categories, suppliers</span></div></div>
+<div class="phase"><div class="pn">08</div><div><b>Dashboard and reports</b><p>Real queries behind the phase-1 layout, charts, the ten reports from section 18, customer and racket analytics including average days between restrings.</p><span class="db">DB · read-only views for the heavier aggregates</span></div></div>
+<div class="phase"><div class="pn">09</div><div><b>Data in and out</b><p>CSV templates, staged import with validation, preview and confirm, per-table export. Your Sheets migration runs here, in dependency order: customers → rackets → products → batches → jobs → sales → expenses.</p><span class="db">DB · import_batches for rollback</span></div></div>
+<div class="phase"><div class="pn">10</div><div><b>Polish</b><p>Phone workflows end to end, empty and error states, destructive-action confirmations, numeric validation, index tuning on the search paths, documented backup and restore.</p><span class="db">DB · indexes, weekly pg_dump to storage</span></div></div>
+<div class="card sunk" style="margin-top:24px"><span class="flag ok">Now</span><b>Phase 1 is built and open in the next tab.</b><p style="margin:10px 0 0">The shell, navigation and dashboard are working against seed data, in the SportCraft design system, responsive from 375px up. Its test checklist is at the bottom of that file.</p></div>
+</div>
+</body>
+</html>

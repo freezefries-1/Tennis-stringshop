@@ -1,0 +1,10 @@
+/* Minimal element defaults. Components carry their own styling inline from tokens. */
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--surface-page);color:var(--text-primary);font-family:var(--font-body);font-size:var(--text-body-m);line-height:var(--lh-body-m);-webkit-font-smoothing:antialiased;text-wrap:pretty}
+h1,h2,h3,h4{font-family:var(--font-display);font-weight:var(--weight-semibold);margin:0;color:var(--text-primary)}
+p{margin:0}
+a{color:var(--text-link);text-decoration:none;border-bottom:1px solid var(--court-200);transition:var(--transition-control)}
+a:hover{color:var(--text-link-hover);border-bottom-color:var(--court-500)}
+:focus-visible{outline:none;box-shadow:var(--ring-focus)}
+.sc-label{font-family:var(--font-mono);font-size:var(--text-label);line-height:var(--lh-label);letter-spacing:var(--ls-label);text-transform:uppercase;color:var(--text-muted)}
+.sc-num{font-family:var(--font-mono);font-variant-numeric:tabular-nums}

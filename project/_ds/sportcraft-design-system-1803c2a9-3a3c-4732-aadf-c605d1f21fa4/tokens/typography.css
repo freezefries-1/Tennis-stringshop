@@ -1,0 +1,25 @@
+:root{
+  /* Sizes are absolute px — do not snap to a scale when reusing. */
+  --text-display-xl:56px;   --lh-display-xl:1.02; /* @kind other */ --ls-display-xl:-0.022em; /* @kind other */
+  --text-display-l:40px;    --lh-display-l:1.06; /* @kind other */  --ls-display-l:-0.02em; /* @kind other */
+  --text-display-m:30px;    --lh-display-m:1.12; /* @kind other */  --ls-display-m:-0.016em; /* @kind other */
+  --text-heading-l:24px;    --lh-heading-l:1.2; /* @kind other */   --ls-heading-l:-0.012em; /* @kind other */
+  --text-heading-m:19px;    --lh-heading-m:1.28; /* @kind other */  --ls-heading-m:-0.008em; /* @kind other */
+  --text-heading-s:16px;    --lh-heading-s:1.34; /* @kind other */  --ls-heading-s:-0.004em; /* @kind other */
+  --text-body-l:17px;       --lh-body-l:1.55; /* @kind other */     --ls-body-l:0; /* @kind other */
+  --text-body-m:15px;       --lh-body-m:1.55; /* @kind other */     --ls-body-m:0; /* @kind other */
+  --text-body-s:13.5px;     --lh-body-s:1.5; /* @kind other */      --ls-body-s:0; /* @kind other */
+  --text-label:12px;        --lh-label:1.15; /* @kind other */      --ls-label:0.085em; /* @kind other */
+  --text-label-s:10.5px;    --lh-label-s:1.1; /* @kind other */     --ls-label-s:0.1em; /* @kind other */
+  --text-mono-m:13px;       --lh-mono-m:1.45; /* @kind other */     --ls-mono-m:0; /* @kind other */
+  --text-mono-s:11.5px;     --lh-mono-s:1.4; /* @kind other */      --ls-mono-s:0.01em; /* @kind other */
+
+  --weight-regular:400;
+  --weight-medium:500;
+  --weight-semibold:600;
+  --weight-bold:700;
+
+  --font-family-display:var(--font-display);
+  --font-family-body:var(--font-body);
+  --font-family-mono:var(--font-mono);
+}
