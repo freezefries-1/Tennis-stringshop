@@ -68,13 +68,13 @@ function SeriesRow({ series }: { series: RacketSeries }) {
   );
 }
 
-function BrandCard({ brand }: { brand: RacketBrand }) {
-  const [open, setOpen] = useState(false);
+function BrandCard({ brand, autoOpen }: { brand: RacketBrand; autoOpen?: boolean }) {
+  const [open, setOpen] = useState(!!autoOpen);
   const [series, setSeries] = useState<RacketSeries[] | null>(null);
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(brand.name);
   const [archived, setArchived] = useState(!!brand.archivedAt);
-  const [addingSeries, setAddingSeries] = useState(false);
+  const [addingSeries, setAddingSeries] = useState(!!autoOpen);
   const [newSeriesName, setNewSeriesName] = useState("");
 
   useEffect(() => {
@@ -85,16 +85,29 @@ function BrandCard({ brand }: { brand: RacketBrand }) {
 
   return (
     <Card padding="16px 20px">
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <button
-          type="button"
-          onClick={() => setOpen((o) => !o)}
-          aria-expanded={open}
-          aria-label={open ? `Collapse ${brand.name}` : `Expand ${brand.name}`}
-          style={{ border: "none", background: "none", cursor: "pointer", color: "var(--ink-500)", display: "flex" }}
+      <div
+        role={editing ? undefined : "button"}
+        tabIndex={editing ? undefined : 0}
+        onClick={editing ? undefined : () => setOpen((o) => !o)}
+        onKeyDown={
+          editing
+            ? undefined
+            : (e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setOpen((o) => !o);
+                }
+              }
+        }
+        aria-expanded={editing ? undefined : open}
+        style={{ display: "flex", alignItems: "center", gap: 10, cursor: editing ? undefined : "pointer" }}
+      >
+        <span
+          aria-hidden="true"
+          style={{ display: "flex", color: "var(--ink-500)" }}
         >
           <Icon name="chevron-right" size={16} style={{ transform: open ? "rotate(90deg)" : undefined, transition: "transform 140ms" }} />
-        </button>
+        </span>
         {editing ? (
           <>
             <Input value={name} onChange={(e) => setName(e.target.value)} size="sm" style={{ flex: 1 }} />
@@ -115,13 +128,21 @@ function BrandCard({ brand }: { brand: RacketBrand }) {
           <>
             <span style={{ flex: 1, fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 16 }}>{name}</span>
             {archived ? <Badge tone="neutral">Archived</Badge> : null}
-            <button type="button" onClick={() => setEditing(true)} style={{ border: "none", background: "none", color: "var(--ink-400)", cursor: "pointer" }}>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditing(true);
+              }}
+              style={{ border: "none", background: "none", color: "var(--ink-400)", cursor: "pointer" }}
+            >
               <Icon name="pencil" size={15} />
             </button>
             <Button
               size="sm"
               variant="ghost"
-              onClick={async () => {
+              onClick={async (e) => {
+                e.stopPropagation();
                 if (!archived && !confirm(`Archive brand "${name}"? It stays visible on existing racket models.`)) return;
                 await archiveBrandAction(brand.id, !archived);
                 setArchived((a) => !a);
@@ -182,11 +203,12 @@ export function BrandsView({ brands: initialBrands }: { brands: RacketBrand[] })
   const [brands, setBrands] = useState(initialBrands);
   const [addingBrand, setAddingBrand] = useState(false);
   const [newBrandName, setNewBrandName] = useState("");
+  const [justCreatedId, setJustCreatedId] = useState<string | null>(null);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       {brands.map((b) => (
-        <BrandCard key={b.id} brand={b} />
+        <BrandCard key={b.id} brand={b} autoOpen={b.id === justCreatedId} />
       ))}
 
       {addingBrand ? (
@@ -202,6 +224,7 @@ export function BrandsView({ brands: initialBrands }: { brands: RacketBrand[] })
               setBrands((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
               setNewBrandName("");
               setAddingBrand(false);
+              setJustCreatedId(created.id);
             }}
           >
             Save
