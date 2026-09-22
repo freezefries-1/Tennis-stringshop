@@ -182,6 +182,11 @@ export async function changeJobStatus(id: string, status: JobStatus): Promise<St
   return row ?? null;
 }
 
+export async function changePaymentStatus(id: string, paymentStatus: JobPaymentStatus): Promise<StringJob | null> {
+  const [row] = await db.update(stringJobs).set({ paymentStatus, updatedAt: new Date() }).where(eq(stringJobs.id, id)).returning();
+  return row ?? null;
+}
+
 const FOREIGN_KEY_VIOLATION = "23503";
 
 function isForeignKeyViolation(err: unknown): boolean {

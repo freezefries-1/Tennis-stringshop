@@ -8,8 +8,9 @@ import { Badge } from "@/components/ds/badge";
 import { SpecList, type SpecListItem } from "@/components/ds/spec-list";
 import { formatCents, formatDate } from "@/lib/format";
 import { ChangeStatusControl } from "@/components/jobs/change-status-control";
+import { ChangePaymentStatusControl } from "@/components/jobs/change-payment-status-control";
 import { DeleteJobButton } from "@/components/jobs/delete-job-button";
-import { JOB_STATUS_LABEL, JOB_STATUS_TONE, PAYMENT_STATUS_LABEL, PAYMENT_STATUS_TONE } from "@/components/jobs/job-status";
+import { JOB_STATUS_LABEL, JOB_STATUS_TONE } from "@/components/jobs/job-status";
 
 export const dynamic = "force-dynamic";
 
@@ -69,7 +70,6 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
   );
 
   const paymentItems: SpecListItem[] = [
-    { label: "Payment status", value: <Badge tone={PAYMENT_STATUS_TONE[job.paymentStatus]}>{PAYMENT_STATUS_LABEL[job.paymentStatus]}</Badge> },
     { label: "Payment method", value: job.paymentMethod ? job.paymentMethod.charAt(0).toUpperCase() + job.paymentMethod.slice(1) : "—" },
   ];
 
@@ -106,8 +106,19 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
         </div>
       </div>
 
-      <div style={{ marginTop: 16 }}>
-        <ChangeStatusControl jobId={job.id} status={job.status} />
+      <div style={{ marginTop: 16, display: "flex", gap: 20, flexWrap: "wrap", alignItems: "center" }}>
+        <div>
+          <div className="lab" style={{ marginBottom: 6 }}>
+            Job status
+          </div>
+          <ChangeStatusControl jobId={job.id} status={job.status} />
+        </div>
+        <div>
+          <div className="lab" style={{ marginBottom: 6 }}>
+            Payment status
+          </div>
+          <ChangePaymentStatusControl jobId={job.id} paymentStatus={job.paymentStatus} />
+        </div>
       </div>
 
       <div className="profile-grid" style={{ marginTop: 20 }}>

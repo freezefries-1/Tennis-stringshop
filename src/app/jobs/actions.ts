@@ -4,12 +4,14 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import {
   changeJobStatus,
+  changePaymentStatus,
   createJob,
   deleteJob,
   getJobSetupForRepeat,
   getPreviousJobForRacket,
   updateJob,
   type JobInput,
+  type JobPaymentStatus,
   type JobStatus,
   type ServiceInput,
   type StringSetupInput,
@@ -147,6 +149,16 @@ export async function updateJobAction(jobId: string, prevState: JobFormState, fo
 
 export async function changeJobStatusAction(jobId: string, status: JobStatus) {
   const job = await changeJobStatus(jobId, status);
+  revalidatePath("/jobs");
+  revalidatePath(`/jobs/${jobId}`);
+  if (job) {
+    revalidatePath(`/customers/${job.customerId}`);
+    revalidatePath(`/customers/${job.customerId}/rackets/${job.customerRacketId}`);
+  }
+}
+
+export async function changePaymentStatusAction(jobId: string, paymentStatus: JobPaymentStatus) {
+  const job = await changePaymentStatus(jobId, paymentStatus);
   revalidatePath("/jobs");
   revalidatePath(`/jobs/${jobId}`);
   if (job) {
