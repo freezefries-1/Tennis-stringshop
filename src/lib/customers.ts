@@ -48,6 +48,7 @@ export async function listCustomers(): Promise<CustomerListRow[]> {
         lastVisit: sql<Date | null>`max(${stringJobs.completedAt})`,
       })
       .from(stringJobs)
+      .where(sql`${stringJobs.status} != 'cancelled'`)
       .groupBy(stringJobs.customerId),
     db
       .select({
@@ -147,7 +148,7 @@ export async function getCustomerStats(id: string) {
     db
       .select({ count: sql<number>`count(*)::int`, lastVisit: sql<Date | null>`max(${stringJobs.completedAt})` })
       .from(stringJobs)
-      .where(sql`${stringJobs.customerId} = ${id}`),
+      .where(sql`${stringJobs.customerId} = ${id} and ${stringJobs.status} != 'cancelled'`),
     db
       .select({ total: sql<number>`coalesce(sum(${sales.totalCents}),0)::int`, lastVisit: sql<Date | null>`max(${sales.occurredAt})` })
       .from(sales)

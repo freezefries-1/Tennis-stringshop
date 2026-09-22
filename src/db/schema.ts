@@ -18,11 +18,12 @@ import { sql } from "drizzle-orm";
 const id = () => uuid("id").defaultRandom().primaryKey();
 const timestamps = { createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull() };
 
-// Human-readable IDs (C0001, R0001, ...). A DB sequence keeps generation
-// atomic under concurrent inserts and monotonic even as rows are archived
-// (never reused, never re-derived from a row count).
+// Human-readable IDs (C0001, R0001, J0001, ...). A DB sequence keeps
+// generation atomic under concurrent inserts and monotonic even as rows are
+// archived/cancelled (never reused, never re-derived from a row count).
 export const customerCodeSeq = pgSequence("customer_code_seq", { startWith: 1, minValue: 1 });
 export const racketCodeSeq = pgSequence("racket_code_seq", { startWith: 1, minValue: 1 });
+export const jobCodeSeq = pgSequence("job_code_seq", { startWith: 1, minValue: 1 });
 
 // -- people and their frames -------------------------------------------------
 
@@ -190,45 +191,104 @@ export const inventoryMovements = pgTable("inventory_movements", {
 
 // -- work and money -------------------------------------------------
 
-export const jobStatusEnum = pgEnum("job_status", ["received", "waiting", "in_progress", "completed", "collected"]);
-export const tensionUnitEnum = pgEnum("tension_unit", ["kg", "lb"]);
+export const paymentMethodEnum = pgEnum("payment_method", ["paynow", "cash", "transfer", "card", "other"]);
+export const paymentStatusEnum = pgEnum("payment_status", ["paid", "unpaid"]);
 
+export const jobStatusEnum = pgEnum("job_status", ["received", "waiting", "in_progress", "completed", "collected", "cancelled"]);
+export const stringSetupTypeEnum = pgEnum("string_setup_type", ["full", "hybrid"]);
+export const tensionUnitEnum = pgEnum("tension_unit", ["kg", "lb"]);
+export const preStretchTypeEnum = pgEnum("pre_stretch_type", ["none", "manual", "machine"]);
+// Distinct from paymentStatusEnum (sales, Phase 6: paid/unpaid only) — a
+// string job also tracks a deposit/partial-payment state day to day, before
+// Phase 6 makes a Sale the actual financial source of truth.
+export const jobPaymentStatusEnum = pgEnum("job_payment_status", ["unpaid", "partially_paid", "paid"]);
+
+// A physical racket's stringing record. Phase 4.
+//
+// Money/knots/pre-stretch/notes live here, not on customer_rackets or
+// racket_models, because the same physical racket is restrung repeatedly,
+// often differently each time — see docs/architecture.html §03's snapshot
+// rule and the Phase 4 brief's explicit "do not tie knots to the master
+// racket model" note. finalPriceCents is the snapshot total (sum of this
+// job's string_job_services rows, minus discountCents) computed at save
+// time — never recomputed from current service prices, so a historical job
+// keeps showing what was actually charged even after prices change later.
 export const stringJobs = pgTable("string_jobs", {
   id: id(),
-  code: text("code").notNull().unique(), // SC-1042
+  code: text("code")
+    .notNull()
+    .unique()
+    .default(sql`'J' || lpad(nextval('job_code_seq')::text, 4, '0')`), // J0001
   customerId: uuid("customer_id").notNull().references(() => customers.id),
   customerRacketId: uuid("customer_racket_id").notNull().references(() => customerRackets.id),
-  receivedAt: timestamp("received_at", { withTimezone: true }).notNull(),
-  dueAt: timestamp("due_at", { withTimezone: true }),
+  setupType: stringSetupTypeEnum("setup_type").notNull(),
+  status: jobStatusEnum("status").notNull().default("received"),
+  // Calendar dates the stringer sets by hand (defaults to today, editable) —
+  // unlike completedAt/collectedAt below, which are real timestamps written
+  // automatically the moment a status change happens.
+  receivedOn: date("received_on").notNull(),
+  dueOn: date("due_on"),
   completedAt: timestamp("completed_at", { withTimezone: true }),
   collectedAt: timestamp("collected_at", { withTimezone: true }),
-  status: jobStatusEnum("status").notNull().default("received"),
-  tensionUnit: tensionUnitEnum("tension_unit").notNull().default("kg"),
+  numberOfKnots: integer("number_of_knots"),
+  preStretchType: preStretchTypeEnum("pre_stretch_type").notNull().default("none"),
   preStretchPct: numeric("pre_stretch_pct", { precision: 5, scale: 2 }),
-  customerSuppliedString: boolean("customer_supplied_string").notNull().default(false),
-  labourChargeCents: integer("labour_charge_cents").notNull(),
-  additionalChargesCents: integer("additional_charges_cents").notNull().default(0),
-  notes: text("notes"),
+  paymentStatus: jobPaymentStatusEnum("payment_status").notNull().default("unpaid"),
+  paymentMethod: paymentMethodEnum("payment_method"),
+  discountCents: integer("discount_cents").notNull().default(0),
+  finalPriceCents: integer("final_price_cents").notNull().default(0), // snapshot
+  generalNotes: text("general_notes"), // customer-facing ("wants a softer feel")
+  stringingNotes: text("stringing_notes"), // internal ("grommet wear at 12 o'clock")
   // snapshots — survive edits to the customer/racket records afterwards
   racketLabel: text("racket_label").notNull(),
   customerName: text("customer_name").notNull(),
+  ...timestamps,
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 export const stringRoleEnum = pgEnum("string_role", ["main", "cross"]);
 
-// One row for a full bed (role 'main'), two for a hybrid.
+// Always exactly two rows per job — main and cross — even for a full bed,
+// where both rows snapshot the same string but keep independent tensions
+// (the brief is explicit that a full bed can still be strung at different
+// main/cross tensions). Hybrid rows simply differ in string identity too.
+// This is a deliberate change from the brief's suggested "position: full |
+// main | cross" — a single "full" row can't hold two tensions, and having
+// exactly 2 rows always keeps every join/query uniform regardless of setup
+// type, instead of branching on setupType to know how many rows to expect.
 export const stringJobStrings = pgTable("string_job_strings", {
   id: id(),
-  stringJobId: uuid("string_job_id").notNull().references(() => stringJobs.id),
+  stringJobId: uuid("string_job_id").notNull().references(() => stringJobs.id, { onDelete: "cascade" }),
   role: stringRoleEnum("role").notNull(),
-  productId: uuid("product_id").notNull().references(() => products.id),
-  batchId: uuid("batch_id").references(() => inventoryBatches.id),
-  lengthUsedM: numeric("length_used_m", { precision: 6, scale: 2 }).notNull(),
-  tension: text("tension").notNull(),
+  // Nullable until Phase 5 builds real string inventory (see brief §33) —
+  // once it exists, backfilling this onto historical rows links them to a
+  // product without touching brandSnapshot/etc., same non-destructive-link
+  // pattern as customer_rackets.racket_model_id in Phase 3.
+  stringProductId: uuid("string_product_id").references(() => products.id),
+  customerSupplied: boolean("customer_supplied").notNull().default(false),
+  // Structured, not one free-text field (brief §12) — and always a
+  // snapshot, never a live join to a product name/price that could change.
+  brandSnapshot: text("brand_snapshot").notNull(),
+  stringNameSnapshot: text("string_name_snapshot").notNull(),
+  gaugeSnapshot: numeric("gauge_snapshot", { precision: 3, scale: 2 }),
+  colourSnapshot: text("colour_snapshot"),
+  tension: numeric("tension", { precision: 5, scale: 2 }).notNull(),
+  tensionUnit: tensionUnitEnum("tension_unit").notNull().default("lb"),
 });
 
-export const paymentMethodEnum = pgEnum("payment_method", ["paynow", "cash", "transfer", "card", "other"]);
-export const paymentStatusEnum = pgEnum("payment_status", ["paid", "unpaid"]);
+// Line items — stringing labour, string charge, grip replacement, and any
+// custom service all go here rather than as fixed columns on string_jobs
+// (brief §17/§18/§32). unitPriceCents/totalCents are snapshots: editing a
+// job later never recomputes an old line from today's prices.
+export const stringJobServices = pgTable("string_job_services", {
+  id: id(),
+  stringJobId: uuid("string_job_id").notNull().references(() => stringJobs.id, { onDelete: "cascade" }),
+  serviceName: text("service_name").notNull(),
+  quantity: numeric("quantity", { precision: 10, scale: 2 }).notNull().default("1"),
+  unitPriceCents: integer("unit_price_cents").notNull(),
+  totalCents: integer("total_cents").notNull(),
+  notes: text("notes"),
+});
 
 export const sales = pgTable("sales", {
   id: id(),

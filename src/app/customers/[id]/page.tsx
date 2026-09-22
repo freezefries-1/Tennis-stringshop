@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getCustomer, getCustomerStats } from "@/lib/customers";
 import { listRacketsForCustomer } from "@/lib/rackets";
+import { listJobsForCustomer } from "@/lib/jobs";
 import { Card } from "@/components/ds/card";
 import { Button } from "@/components/ds/button";
 import { IconButton } from "@/components/ds/icon-button";
@@ -16,7 +17,7 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
   const customer = await getCustomer(id);
   if (!customer) notFound();
 
-  const [stats, rackets] = await Promise.all([getCustomerStats(id), listRacketsForCustomer(id, true)]);
+  const [stats, rackets, jobs] = await Promise.all([getCustomerStats(id), listRacketsForCustomer(id, true), listJobsForCustomer(id)]);
 
   const items: SpecListItem[] = [
     { label: "Phone", value: customer.phone },
@@ -41,7 +42,7 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
               Add racket
             </Button>
           </Link>
-          <Link href="/jobs">
+          <Link href={`/jobs/new?customerId=${customer.id}`}>
             <Button size="sm" variant="secondary">
               New string job
             </Button>
@@ -65,7 +66,7 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
           <SpecList dense items={items} />
         </Card>
 
-        <CustomerProfileTabs customerId={customer.id} rackets={rackets} />
+        <CustomerProfileTabs customerId={customer.id} rackets={rackets} jobs={jobs} />
       </div>
     </div>
   );

@@ -9,6 +9,9 @@ import { Tabs } from "@/components/ds/tabs";
 import { Icon } from "@/components/ds/icon";
 import { racketLabel } from "@/lib/racket-label";
 import type { RacketWithSpecs } from "@/lib/rackets";
+import type { JobHistoryRow } from "@/lib/jobs";
+import { formatCents, formatDate } from "@/lib/format";
+import { JOB_STATUS_LABEL, JOB_STATUS_TONE } from "@/components/jobs/job-status";
 
 const TABS = [
   { value: "rackets", label: "Rackets" },
@@ -29,7 +32,7 @@ function NotBuiltYet({ phase, action, actionHref }: { phase: number; action: str
   );
 }
 
-export function CustomerProfileTabs({ customerId, rackets: allRackets }: { customerId: string; rackets: RacketWithSpecs[] }) {
+export function CustomerProfileTabs({ customerId, rackets: allRackets, jobs }: { customerId: string; rackets: RacketWithSpecs[]; jobs: JobHistoryRow[] }) {
   const [tab, setTab] = useState("rackets");
   const [showArchived, setShowArchived] = useState(false);
 
@@ -90,7 +93,36 @@ export function CustomerProfileTabs({ customerId, rackets: allRackets }: { custo
             )}
           </>
         ) : tab === "stringing" ? (
-          <NotBuiltYet phase={4} action="New string job" actionHref="/jobs" />
+          jobs.length === 0 ? (
+            <div className="rec-empty" style={{ display: "flex", flexDirection: "column", gap: 12, alignItems: "center" }}>
+              <span>No string jobs on file yet.</span>
+              <Link href={`/jobs/new?customerId=${customerId}`}>
+                <Button size="sm" variant="secondary" iconLeft="plus">
+                  New string job
+                </Button>
+              </Link>
+            </div>
+          ) : (
+            <div className="rows">
+              {jobs.map((j) => (
+                <Link key={j.id} href={`/jobs/${j.id}`} className="row">
+                  <div className="row-main">
+                    <div className="row-t">{j.racketLabel}</div>
+                    <div className="row-s num">
+                      {formatDate(j.receivedOn)} · {j.mainString === j.crossString ? j.mainString : `${j.mainString} / ${j.crossString}`} ·{" "}
+                      {j.mainTension === j.crossTension ? `${j.mainTension} ${j.tensionUnit}` : `${j.mainTension ?? "?"} / ${j.crossTension ?? "?"} ${j.tensionUnit}`}
+                    </div>
+                  </div>
+                  <div className="row-end">
+                    <span className="row-s num">{formatCents(j.finalPriceCents)}</span>
+                    <Badge tone={JOB_STATUS_TONE[j.status]} dot>
+                      {JOB_STATUS_LABEL[j.status]}
+                    </Badge>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )
         ) : (
           <NotBuiltYet phase={6} action="New sale" actionHref="/pos" />
         )}

@@ -31,14 +31,30 @@ currency. Full brief, phase plan and the reasoning behind the schema live in
   path). A racket linked to a model shows "Model specifications" (from the
   catalogue, read-only) separately from "Actual racket" (this physical
   frame's own measured data) — see `RacketWithSpecs` in `src/lib/rackets.ts`.
-- Everything else (`jobs`, `pos`, `inventory`, `products`, `expenses`,
-  `reports`) is still `<Placeholder page="...">` — see `src/lib/nav.ts` for
-  the phase each one is scheduled in. Don't build ahead of the current
-  phase; build what a placeholder describes when its phase comes up, not
-  before. The top-level "Rackets" nav item is *also* still a placeholder —
-  it was meant for a future global cross-customer racket index/search, which
-  is a different thing from `/catalogue` (the master model database) and
-  from the per-customer racket lists Phase 2 already built; nothing built it
+- **Phase 4** (string jobs and stringing history) — done. `/jobs`,
+  `/jobs/new` and `/jobs/[id]` (+ `/edit`) are real. A job always has exactly
+  two `string_job_strings` rows (main + cross), even for a full bed — see
+  the comment on that table in `schema.ts` for why (a full bed can still be
+  strung at different main/cross tensions, so one row can't hold both).
+  Pricing is entirely line items (`string_job_services` — "Stringing
+  labour", "Grip replacement", a "String" line, whatever the job needs);
+  `string_jobs` has no dedicated charge columns, only `discount_cents` and
+  the computed snapshot `final_price_cents`. "Repeat previous setup"
+  (`applyRepeatToValues` in `job-form-types.ts`) copies string/knots/
+  pre-stretch/services/discount from a previous job into a new, still-blank,
+  still-editable form — never the job id, dates, status or payment status.
+  Customer/racket profiles show real stringing history now
+  (`listJobsForCustomer`/`listJobsForRacket` in `src/lib/jobs.ts`); a
+  customer's `jobCount`/`lastVisit` (`src/lib/customers.ts`) exclude
+  cancelled jobs so a job that didn't go ahead doesn't count as a visit.
+- Everything else (`pos`, `inventory`, `products`, `expenses`, `reports`)
+  is still `<Placeholder page="...">` — see `src/lib/nav.ts` for the phase
+  each one is scheduled in. Don't build ahead of the current phase; build
+  what a placeholder describes when its phase comes up, not before. The
+  top-level "Rackets" nav item is *also* still a placeholder — it was meant
+  for a future global cross-customer racket index/search, which is a
+  different thing from `/catalogue` (the master model database) and from
+  the per-customer racket lists Phase 2 already built; nothing built it
   yet, in any phase.
 
 ## Where things are
@@ -81,7 +97,26 @@ currency. Full brief, phase plan and the reasoning behind the schema live in
 - `src/components/catalogue/` — Phase 3 UI: the model browse/search/filter
   view, the brand/series manager (accordion, inline add/edit/archive), the
   model create/edit form. `src/components/ds/combobox.tsx` is the shared
-  search-to-filter dropdown both this and `RacketModelPicker` build on.
+  search-to-filter dropdown `RacketModelPicker`, the catalogue's model form,
+  and Phase 4's customer/racket pickers all build on.
+- `src/app/jobs/` — Phase 4 routes and server actions (`actions.ts`, plus
+  `job-form-types.ts` in `src/lib/` for the same "`use server` may only
+  export async functions" reason as Phase 2/3's form-types files).
+  `src/lib/jobs.ts` is the data-access layer — `getRacket` from
+  `rackets.ts` is what a job's `racket` field resolves through, so a job
+  attached to a Phase-3-linked racket shows real catalogue specs the same
+  way a racket profile does.
+- `src/components/jobs/` — Phase 4 UI: `customer-picker.tsx` and
+  `racket-picker.tsx` (search-and-select-or-quick-create, mirroring the
+  catalogue pickers — the racket quick-add embeds `RacketModelPicker`
+  directly rather than re-implementing Brand → Series → Model), the
+  Full-bed/Hybrid `string-setup-fields.tsx`, `services-editor.tsx` (line
+  items, not fixed charge columns), `knots-selector.tsx`, `job-form.tsx`
+  (the create/edit orchestrator — owns all client state, submits via a
+  wall of hidden inputs since almost none of the visible fields have a
+  bare `name` attribute), and `jobs-view.tsx` (the list page). `job-
+  status.ts` has the status/payment-status label and Badge-tone maps
+  shared by the list, detail page, and both profile integrations.
 - `src/db/schema.ts` — the Drizzle schema matching `docs/architecture.html`
   §03–06 (snapshot columns, the `UNIQUE(string_job_id)` constraint that makes
   double-billing impossible, batch-level FIFO), extended for Phase 2:
@@ -94,7 +129,13 @@ currency. Full brief, phase plan and the reasoning behind the schema live in
   a catalogue model — when set, brand/series/model/specs resolve from the
   join (`RacketWithSpecs` in `rackets.ts`) instead of the racket's own
   free-text columns, which stay in place either way as the
-  manual/unknown-racket fallback.
+  manual/unknown-racket fallback. Extended again for Phase 4: `string_jobs`,
+  `string_job_strings` and `string_job_services` were rebuilt from Phase 1's
+  never-used stub shape into the real thing — `job_code_seq` generates
+  `J0001` codes the same way; `string_job_strings.string_product_id` is
+  nullable, ready for Phase 5 to backfill without touching the brand/
+  string/gauge/colour snapshot columns next to it, same non-destructive-link
+  pattern as `racket_model_id`.
 - `src/db/client.ts` — the live Drizzle/postgres.js connection, reading
   `DATABASE_URL`. Every server component/action that touches it needs
   `export const dynamic = "force-dynamic"` in its `page.tsx` so Next doesn't
@@ -119,7 +160,15 @@ currency. Full brief, phase plan and the reasoning behind the schema live in
   prompt needs a real TTY and hangs forever in this sandbox; two
   unambiguous diffs (nothing removed in the same table a column is added
   to) never trigger it. Reach for the same split if a future schema change
-  both drops and adds columns on one table.
+  both drops and adds columns on one table. `0004`/`0005` (Phase 4) use the
+  same technique at the whole-table level: `string_jobs`/`string_job_strings`
+  had almost nothing in common between their Phase-1-stub shape and the
+  real Phase 4 shape, so 0004 shrinks `string_jobs` to just its `id` column
+  and drops `string_job_strings` outright (unambiguous — nothing added in
+  that step), then 0005 adds everything back plus the new
+  `string_job_services` table. `string_jobs` itself couldn't be dropped
+  and recreated the way `string_job_strings` was, because
+  `sale_items.string_job_id` already references it.
 - `_ds/` — the full design-system bundle as exported (guidelines, unported
   components, the two reference UI kits). Consult it before inventing a new
   component.

@@ -49,14 +49,7 @@ export const PAGES: Record<string, PageMeta> = {
     title: "String jobs",
     label: "Bench",
     action: "New string job",
-    phase: 4,
-    builds: [
-      "Job creation with a customer-filtered racket select",
-      "Full-bed and hybrid setups, kg or lb",
-      "Last setup panel and Repeat previous setup",
-      "Received → Waiting → In progress → Completed → Collected",
-      "Quick actions from customer and racket profiles",
-    ],
+    actionHref: "/jobs/new",
   },
   pos: {
     title: "POS",

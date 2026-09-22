@@ -1,5 +1,9 @@
-import { Placeholder } from "@/components/shell/placeholder";
+import { getJobStats, listJobs } from "@/lib/jobs";
+import { JobsView } from "@/components/jobs/jobs-view";
 
-export default function JobsPage() {
-  return <Placeholder page="jobs" />;
+export const dynamic = "force-dynamic";
+
+export default async function JobsPage() {
+  const [jobs, stats] = await Promise.all([listJobs(), getJobStats()]);
+  return <JobsView jobs={jobs} stats={stats} />;
 }

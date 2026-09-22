@@ -1,21 +1,26 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getRacket, racketLabel } from "@/lib/rackets";
+import { listJobsForRacket } from "@/lib/jobs";
 import { Card } from "@/components/ds/card";
 import { Button } from "@/components/ds/button";
+import { Badge } from "@/components/ds/badge";
 import { IconButton } from "@/components/ds/icon-button";
 import { SpecList, type SpecListItem } from "@/components/ds/spec-list";
 import { PromoteRacketButton } from "@/components/customers/promote-racket-button";
 import { ArchiveRacketButton } from "@/components/customers/archive-racket-button";
 import { DeleteRacketButton } from "@/components/customers/delete-racket-button";
+import { formatCents, formatDate } from "@/lib/format";
+import { JOB_STATUS_LABEL, JOB_STATUS_TONE } from "@/components/jobs/job-status";
 
 export const dynamic = "force-dynamic";
 
 export default async function RacketProfilePage({ params }: { params: Promise<{ id: string; racketId: string }> }) {
   const { id, racketId } = await params;
-  const found = await getRacket(racketId);
+  const [found, jobs] = await Promise.all([getRacket(racketId), listJobsForRacket(racketId)]);
   if (!found || found.racket.customerId !== id) notFound();
   const { racket, owner } = found;
+  const lastJob = jobs[0] ?? null;
 
   const actualItems: SpecListItem[] = [
     { label: "Grip size", value: racket.gripSize ?? "—" },
@@ -70,8 +75,15 @@ export default async function RacketProfilePage({ params }: { params: Promise<{ 
         </div>
         <div className="profile-actions">
           {!racket.linkedModel ? <PromoteRacketButton customerId={id} racketId={racketId} /> : null}
-          <Link href="/jobs">
-            <Button size="sm" variant="secondary">
+          {lastJob ? (
+            <Link href={`/jobs/new?customerId=${id}&racketId=${racketId}&repeat=1`}>
+              <Button size="sm" variant="secondary">
+                Repeat previous setup
+              </Button>
+            </Link>
+          ) : null}
+          <Link href={`/jobs/new?customerId=${id}&racketId=${racketId}`}>
+            <Button size="sm" variant="secondary" iconLeft="plus">
               New string job
             </Button>
           </Link>
@@ -115,23 +127,58 @@ export default async function RacketProfilePage({ params }: { params: Promise<{ 
 
         <Card padding="20px 24px">
           <div className="lab" style={{ marginBottom: 8 }}>
-            Stringing history
+            Last string setup
           </div>
-          <SpecList
-            dense
-            items={[
-              { label: "Number of string jobs", value: <span className="num">0</span> },
-              { label: "Last string setup", value: "—" },
-            ]}
-          />
-          <div className="rec-empty" style={{ display: "flex", flexDirection: "column", gap: 12, alignItems: "center", paddingTop: 24 }}>
-            <span>Not tracked yet — Phase 4 adds job history here.</span>
-            <Link href="/jobs">
-              <Button size="sm" variant="secondary">
-                New string job
-              </Button>
-            </Link>
+          {lastJob ? (
+            <SpecList
+              dense
+              items={[
+                { label: "String", value: lastJob.mainString === lastJob.crossString ? lastJob.mainString : `${lastJob.mainString} / ${lastJob.crossString}` },
+                {
+                  label: "Tension",
+                  value: lastJob.mainTension === lastJob.crossTension ? `${lastJob.mainTension} ${lastJob.tensionUnit}` : `${lastJob.mainTension ?? "?"} / ${lastJob.crossTension ?? "?"} ${lastJob.tensionUnit}`,
+                },
+                { label: "Number of knots", value: lastJob.numberOfKnots ?? "—" },
+                { label: "Date", value: formatDate(lastJob.receivedOn) },
+              ]}
+            />
+          ) : (
+            <div className="row-s">No string jobs on file yet.</div>
+          )}
+
+          <div className="lab" style={{ marginTop: 20, marginBottom: 8 }}>
+            Stringing history · {jobs.length}
           </div>
+          {jobs.length === 0 ? (
+            <div className="rec-empty" style={{ display: "flex", flexDirection: "column", gap: 12, alignItems: "center", paddingTop: 8 }}>
+              <span>No string jobs on file yet.</span>
+              <Link href={`/jobs/new?customerId=${id}&racketId=${racketId}`}>
+                <Button size="sm" variant="secondary" iconLeft="plus">
+                  New string job
+                </Button>
+              </Link>
+            </div>
+          ) : (
+            <div className="rows">
+              {jobs.map((j) => (
+                <Link key={j.id} href={`/jobs/${j.id}`} className="row">
+                  <div className="row-main">
+                    <div className="row-t">{j.mainString === j.crossString ? j.mainString : `${j.mainString} / ${j.crossString}`}</div>
+                    <div className="row-s num">
+                      {formatDate(j.receivedOn)} · {j.mainTension === j.crossTension ? `${j.mainTension} ${j.tensionUnit}` : `${j.mainTension ?? "?"} / ${j.crossTension ?? "?"} ${j.tensionUnit}`}
+                      {j.numberOfKnots ? ` · ${j.numberOfKnots} knots` : ""}
+                    </div>
+                  </div>
+                  <div className="row-end">
+                    <span className="row-s num">{formatCents(j.finalPriceCents)}</span>
+                    <Badge tone={JOB_STATUS_TONE[j.status]} dot>
+                      {JOB_STATUS_LABEL[j.status]}
+                    </Badge>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
         </Card>
       </div>
     </div>
