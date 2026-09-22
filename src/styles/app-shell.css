@@ -4,8 +4,8 @@
    against the approved design. `base.css` (design system) already covers *, body, a. */
 /* Some nav rows render as <a> (Next Link) rather than <button>, so undo the
    base.css anchor treatment (link colour + underline) on them explicitly. */
-a.nav-i,a.mnav-i,a.sheet-i{color:var(--ink-700);text-decoration:none;border-bottom:none}
-a.nav-i:hover,a.mnav-i:hover,a.sheet-i:hover{color:var(--ink-700);border-bottom:none}
+a.nav-i,a.mnav-i,a.sheet-i,a.row{color:var(--ink-700);text-decoration:none;border-bottom:none}
+a.nav-i:hover,a.mnav-i:hover,a.sheet-i:hover,a.row:hover{color:var(--ink-700);border-bottom:none}
 .num{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
 .lab{font-family:var(--font-mono);font-size:10.5px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-400)}
 .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:7px;vertical-align:0}
@@ -113,3 +113,45 @@ a.nav-i:hover,a.mnav-i:hover,a.sheet-i:hover{color:var(--ink-700);border-bottom:
 .sec-head{margin-top:10px}}
 @media(max-width:560px){.g4{grid-template-columns:1fr}.ph-title{font-size:21px}.sheet-g{grid-template-columns:1fr}
 .row{flex-wrap:wrap;gap:8px}.row-end{flex-direction:row;align-items:center;width:100%;justify-content:space-between}}
+
+/* records: search + table/cards, used by Customers and future record lists */
+.rec-wrap{display:flex;flex-direction:column;gap:16px;max-width:1200px}
+.rec-tools{display:flex;gap:12px;align-items:center}
+.rec-tools .search{flex:1;max-width:420px;margin-left:0}
+.dtable-wrap{display:block}
+.dtable{width:100%;border-collapse:collapse}
+.dtable th{text-align:left;padding:10px 16px;font-family:var(--font-mono);font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-400);border-bottom:1px solid var(--ink-100);white-space:nowrap}
+.dtable td{padding:12px 16px;border-bottom:1px solid var(--ink-100);font-size:14px;vertical-align:middle}
+.dtable tr:last-child td{border-bottom:none}
+.dtable tbody tr{cursor:pointer;transition:background 120ms}
+.dtable tbody tr:hover{background:var(--paper-050)}
+.dtable td.num,.dtable th.num{text-align:right}
+.ccards{display:none;flex-direction:column;gap:10px}
+.ccard{display:flex;flex-direction:column;gap:10px;cursor:pointer}
+.ccard-top{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.ccard-name{font-size:15px;font-weight:500;color:var(--ink-900)}
+.ccard-meta{display:flex;flex-wrap:wrap;gap:6px 14px}
+.ccard-stats{display:flex;justify-content:space-between;gap:12px;padding-top:10px;border-top:1px solid var(--ink-100)}
+.ccard-stat{display:flex;flex-direction:column;gap:3px}
+.rec-empty{padding:48px 24px;text-align:center;color:var(--ink-400);font-size:14.5px}
+@media(max-width:760px){.dtable-wrap{display:none}.ccards{display:flex}.rec-tools{flex-wrap:wrap}.rec-tools .search{flex:1 0 100%;max-width:none}}
+@media(max-width:420px){.ccard-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px}}
+
+/* forms */
+.form{display:flex;flex-direction:column;gap:20px;max-width:640px}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.form-actions{display:flex;gap:10px;padding-top:8px;border-top:1px solid var(--ink-100)}
+.form textarea{width:100%;min-height:88px;padding:10px 12px;border:1px solid var(--border-subtle);border-radius:var(--radius-sm);background:var(--paper-000);font-family:var(--font-body);font-size:var(--text-body-m);color:var(--text-primary);resize:vertical;transition:var(--transition-control)}
+.form textarea:focus{outline:none;border-color:var(--court-500);box-shadow:0 0 0 3px rgba(21,107,82,0.12)}
+.form-warning{display:flex;flex-direction:column;gap:10px;padding:14px 16px;border-radius:var(--radius-md);background:var(--signal-warning-bg);border:1px solid #EEDCAE}
+.form-warning p{font-size:13.5px;color:var(--ink-800);line-height:1.5}
+@media(max-width:560px){.form-grid{grid-template-columns:1fr}}
+
+/* profile header, used by customer + racket profiles */
+.profile-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap}
+.profile-id{font-family:var(--font-mono);font-size:12px;color:var(--ink-400)}
+.profile-name{font-family:var(--font-display);font-size:24px;font-weight:600;letter-spacing:-0.016em;margin:2px 0 0}
+.profile-actions{display:flex;gap:8px;flex-wrap:wrap}
+.profile-grid{display:grid;grid-template-columns:1.1fr 1.6fr;gap:16px;align-items:start}
+@media(max-width:900px){.profile-grid{grid-template-columns:1fr}}
+.tab-panel{padding-top:20px}

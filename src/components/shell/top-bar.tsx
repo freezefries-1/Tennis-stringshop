@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Button } from "@/components/ds/button";
 import { GlobalSearch } from "./global-search";
 import { PAGES } from "@/lib/nav";
@@ -15,9 +16,17 @@ export function TopBar({ page }: { page: string }) {
       <GlobalSearch />
       <div className="top-a">
         {p.action ? (
-          <Button size="sm" iconLeft="plus">
-            {p.action}
-          </Button>
+          p.actionHref ? (
+            <Link href={p.actionHref}>
+              <Button size="sm" iconLeft="plus">
+                {p.action}
+              </Button>
+            </Link>
+          ) : (
+            <Button size="sm" iconLeft="plus">
+              {p.action}
+            </Button>
+          )
         ) : null}
         {page === "dashboard" ? (
           <Button size="sm" iconLeft="plus">

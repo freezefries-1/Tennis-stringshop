@@ -12,16 +12,26 @@
 // (`C-0231`, `SC-1042`) alongside its uuid primary key. Columns comprising the
 // "snapshot rule" (never recomputed after the transaction) are marked below.
 
-import { boolean, date, integer, jsonb, numeric, pgEnum, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { boolean, date, integer, jsonb, numeric, pgEnum, pgSequence, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 const id = () => uuid("id").defaultRandom().primaryKey();
 const timestamps = { createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull() };
+
+// Human-readable IDs (C0001, R0001, ...). A DB sequence keeps generation
+// atomic under concurrent inserts and monotonic even as rows are archived
+// (never reused, never re-derived from a row count).
+export const customerCodeSeq = pgSequence("customer_code_seq", { startWith: 1, minValue: 1 });
+export const racketCodeSeq = pgSequence("racket_code_seq", { startWith: 1, minValue: 1 });
 
 // -- people and their frames -------------------------------------------------
 
 export const customers = pgTable("customers", {
   id: id(),
-  code: text("code").notNull().unique(), // C-0231
+  code: text("code")
+    .notNull()
+    .unique()
+    .default(sql`'C' || lpad(nextval('customer_code_seq')::text, 4, '0')`), // C0001
   name: text("name").notNull(),
   phone: text("phone").notNull(),
   email: text("email"),
@@ -57,11 +67,30 @@ export const racketModels = pgTable("racket_models", {
 
 // Two identical frames owned by the same customer are two rows pointing at the
 // same racket_model_id — never merged into one.
+//
+// Phase 2 ships before the master racket database (Phase 3) exists, so a
+// racket is entered manually: brand/series/model/generationYear/headSizeSqin/
+// stringPattern are free text on the row itself, and racketModelId stays
+// null. Once Phase 3's catalogue and dependent dropdowns exist, new rackets
+// can be linked via racketModelId instead — and existing manually-entered
+// rows can be matched up and have racketModelId backfilled onto them without
+// touching or discarding the free-text fields already on the row.
 export const customerRackets = pgTable("customer_rackets", {
   id: id(),
-  code: text("code").notNull().unique(), // R-0417
+  code: text("code")
+    .notNull()
+    .unique()
+    .default(sql`'R' || lpad(nextval('racket_code_seq')::text, 4, '0')`), // R0001
   customerId: uuid("customer_id").notNull().references(() => customers.id),
-  racketModelId: uuid("racket_model_id").notNull().references(() => racketModels.id),
+  racketModelId: uuid("racket_model_id").references(() => racketModels.id),
+  // Manual entry (Phase 2), mirrors racket_models' shape 1:1 so Phase 3 can
+  // match/backfill racketModelId against the catalogue.
+  brand: text("brand"),
+  series: text("series"),
+  model: text("model"),
+  generationYear: integer("generation_year"),
+  headSizeSqin: numeric("head_size_sqin", { precision: 6, scale: 2 }),
+  stringPattern: text("string_pattern"),
   gripSize: text("grip_size"),
   staticWeightG: integer("static_weight_g"),
   swingweight: integer("swingweight"),

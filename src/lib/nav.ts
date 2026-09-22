@@ -35,6 +35,10 @@ export interface PageMeta {
   title: string;
   label: string;
   action: string | null;
+  /** When set, the top bar's action button is a real link (the page is
+   * built). Omitted for pages still on the phase plan, whose action button
+   * stays decorative until their phase lands. */
+  actionHref?: string;
   phase?: number;
   builds?: string[];
 }
@@ -70,15 +74,8 @@ export const PAGES: Record<string, PageMeta> = {
   customers: {
     title: "Customers",
     label: "People",
-    action: "New customer",
-    phase: 2,
-    builds: [
-      "List, create, edit, archive",
-      "Profile: contact, rackets, stringing and purchase history",
-      "Derived lifetime spend, job count, last visit, typical tension",
-      "Search by name, phone or customer ID",
-      "New string job straight from the profile",
-    ],
+    action: "Add customer",
+    actionHref: "/customers/new",
   },
   rackets: {
     title: "Rackets",

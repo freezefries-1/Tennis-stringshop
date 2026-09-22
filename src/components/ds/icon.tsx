@@ -21,6 +21,10 @@ import {
   Check,
   Banknote,
   ArrowRight,
+  Pencil,
+  ChevronRight,
+  Mail,
+  Phone,
   type LucideIcon,
 } from "lucide-react";
 
@@ -46,6 +50,10 @@ const ICONS: Record<string, LucideIcon> = {
   x: X,
   check: Check,
   banknote: Banknote,
+  pencil: Pencil,
+  "chevron-right": ChevronRight,
+  mail: Mail,
+  phone: Phone,
   "arrow-right": ArrowRight,
 };
 
