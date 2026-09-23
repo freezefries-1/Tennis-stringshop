@@ -16,9 +16,10 @@ import {
   type ServiceInput,
   type StringSetupInput,
 } from "@/lib/jobs";
-import { createRacket, listRacketsForCustomer, type RacketInput } from "@/lib/rackets";
+import { createRacket, getRacket, listRacketsForCustomer, type RacketInput } from "@/lib/rackets";
 import { findCustomerByPhone, createCustomer } from "@/lib/customers";
 import { createStringProduct, searchStringProductsForPicker, type StringProductInput } from "@/lib/string-inventory";
+import { getSuggestedStringUsage } from "@/lib/string-usage";
 import type { JobFormState, JobFormValues } from "@/lib/job-form-types";
 
 function readStringLine(formData: FormData, prefix: "main" | "cross") {
@@ -243,6 +244,16 @@ export async function fetchRacketsForCustomer(customerId: string) {
 
 export async function fetchPreviousSetup(customerRacketId: string, excludeJobId?: string) {
   return getPreviousJobForRacket(customerRacketId, excludeJobId);
+}
+
+/** Suggested string usage for a racket (specific model → string pattern →
+ * global default, in that order — see getSuggestedStringUsage). Only ever
+ * pre-fills the job form's editable quantity field; the actual saved
+ * amount, not this suggestion, is what inventory deduction and COGS use. */
+export async function fetchSuggestedStringUsage(customerRacketId: string) {
+  const result = await getRacket(customerRacketId);
+  if (!result) return null;
+  return getSuggestedStringUsage(result.racket);
 }
 
 export async function fetchJobSetupForRepeat(jobId: string) {

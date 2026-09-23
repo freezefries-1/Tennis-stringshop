@@ -32,6 +32,9 @@ export default async function EditModelPage({ params }: { params: Promise<{ id: 
       standardLengthIn: model.standardLengthIn ?? "",
       recommendedTensionMinLbs: model.recommendedTensionMinLbs ?? "",
       recommendedTensionMaxLbs: model.recommendedTensionMaxLbs ?? "",
+      recommendedFullBedLengthM: model.recommendedFullBedLengthM ?? "",
+      recommendedMainLengthM: model.recommendedMainLengthM ?? "",
+      recommendedCrossLengthM: model.recommendedCrossLengthM ?? "",
       notes: model.notes ?? "",
     },
   };

@@ -50,6 +50,13 @@
       "when": 1790096957168,
       "tag": "0006_phase5_string_inventory",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790127478515,
+      "tag": "0007_string_length_suggestions",
+      "breakpoints": true
     }
   ]
 }

@@ -28,6 +28,13 @@ export default async function ModelDetailPage({ params }: { params: Promise<{ id
     },
   ];
 
+  const hasRecommendedLength = model.recommendedFullBedLengthM || model.recommendedMainLengthM || model.recommendedCrossLengthM;
+  const stringLengthItems: SpecListItem[] = [
+    { label: "Full bed", value: model.recommendedFullBedLengthM ? `${model.recommendedFullBedLengthM}m` : "—" },
+    { label: "Main", value: model.recommendedMainLengthM ? `${model.recommendedMainLengthM}m` : "—" },
+    { label: "Cross", value: model.recommendedCrossLengthM ? `${model.recommendedCrossLengthM}m` : "—" },
+  ];
+
   return (
     <div className="ph-wrap" style={{ maxWidth: 960 }}>
       <div className="profile-head">
@@ -55,6 +62,14 @@ export default async function ModelDetailPage({ params }: { params: Promise<{ id
             Specifications
           </div>
           <SpecList dense items={specItems} />
+          {hasRecommendedLength ? (
+            <>
+              <div className="lab" style={{ marginTop: 16, marginBottom: 8 }}>
+                Recommended string length
+              </div>
+              <SpecList dense items={stringLengthItems} />
+            </>
+          ) : null}
           {model.notes ? (
             <>
               <div className="lab" style={{ marginTop: 16, marginBottom: 6 }}>

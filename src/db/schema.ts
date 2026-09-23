@@ -74,8 +74,41 @@ export const racketModels = pgTable("racket_models", {
   standardLengthIn: numeric("standard_length_in", { precision: 4, scale: 2 }),
   recommendedTensionMinLbs: numeric("recommended_tension_min_lbs", { precision: 5, scale: 2 }),
   recommendedTensionMaxLbs: numeric("recommended_tension_max_lbs", { precision: 5, scale: 2 }),
+  // Phase 5 addition — this specific racket's own recommended string usage,
+  // all optional (brief: "do not require this for every racket"). Takes
+  // priority over the string-pattern default below when set; a racket that
+  // needs noticeably more/less than its pattern's typical amount (frame
+  // size, grommet friction, ...) can say so without that becoming every
+  // other racket's default too.
+  recommendedFullBedLengthM: numeric("recommended_full_bed_length_m", { precision: 6, scale: 2 }),
+  recommendedMainLengthM: numeric("recommended_main_length_m", { precision: 6, scale: 2 }),
+  recommendedCrossLengthM: numeric("recommended_cross_length_m", { precision: 6, scale: 2 }),
   notes: text("notes"),
   archivedAt: timestamp("archived_at", { withTimezone: true }),
+});
+
+// Phase 5 addition — string usage defaults keyed by pattern ("16x19",
+// "18x20", ...), the middle tier of the suggestion priority (specific
+// racket model → pattern default → global default; see
+// src/lib/string-usage.ts). `pattern` is matched against
+// RacketWithSpecs.effectiveStringPattern (src/lib/rackets.ts), which is
+// already normalized the same way whether the racket is catalogue-linked
+// or manual, so no separate parsing is needed here.
+//
+// Deliberately not keyed on stringing method (one-piece/two-piece) yet —
+// the brief asks only that this not be designed shut against that later.
+// `pattern` carries a plain uniqueness constraint rather than being the
+// primary key itself, so widening it to a (pattern, stringing_method)
+// composite later is an ordinary migration, not a redesign.
+export const stringPatternDefaults = pgTable("string_pattern_defaults", {
+  id: id(),
+  pattern: text("pattern").notNull().unique(),
+  fullBedLengthM: numeric("full_bed_length_m", { precision: 6, scale: 2 }),
+  mainLengthM: numeric("main_length_m", { precision: 6, scale: 2 }),
+  crossLengthM: numeric("cross_length_m", { precision: 6, scale: 2 }),
+  notes: text("notes"),
+  ...timestamps,
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 // Two identical frames owned by the same customer are two rows pointing at the

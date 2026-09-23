@@ -14,6 +14,9 @@ export interface ModelFormValues {
   standardLengthIn: string;
   recommendedTensionMinLbs: string;
   recommendedTensionMaxLbs: string;
+  recommendedFullBedLengthM: string;
+  recommendedMainLengthM: string;
+  recommendedCrossLengthM: string;
   notes: string;
 }
 
@@ -39,6 +42,9 @@ export const emptyModelFormState: ModelFormState = {
     standardLengthIn: "",
     recommendedTensionMinLbs: "",
     recommendedTensionMaxLbs: "",
+    recommendedFullBedLengthM: "",
+    recommendedMainLengthM: "",
+    recommendedCrossLengthM: "",
     notes: "",
   },
 };

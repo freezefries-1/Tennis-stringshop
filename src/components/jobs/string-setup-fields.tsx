@@ -4,6 +4,22 @@ import { Input } from "@/components/ds/input";
 import { Field } from "@/components/ds/field";
 import { StringProductPicker, type PickedStringProduct } from "./string-product-picker";
 import type { StringLineValues } from "@/lib/job-form-types";
+import type { SuggestedStringUsage } from "@/lib/string-usage";
+
+type UsageField = "fullBed" | "main" | "cross";
+
+/** "Suggested 10.8m from this racket's own recommended length" etc —
+ * distinguishing the suggestion (brief: "clearly distinguish Suggested
+ * String Length from Actual String Used") from the editable Length used
+ * field below it, which is what inventory deduction and COGS actually use. */
+function suggestionHint(suggestion: SuggestedStringUsage | null, field: UsageField, unit: "m" | "set"): string | undefined {
+  if (!suggestion) return undefined;
+  const value = field === "fullBed" ? suggestion.fullBedM : field === "main" ? suggestion.mainM : suggestion.crossM;
+  const source = field === "fullBed" ? suggestion.fullBedSource : field === "main" ? suggestion.mainSource : suggestion.crossSource;
+  const suffix = unit === "set" ? "sets" : "m";
+  const sourceLabel = source === "model" ? "this racket's own recommended length" : source === "pattern" ? `the ${suggestion.matchedPattern} default` : "the global default";
+  return `Suggested ${value}${suffix}, from ${sourceLabel} — override with the actual length strung`;
+}
 
 function unitSelect(value: "kg" | "lb", onChange: (v: "kg" | "lb") => void) {
   return (
@@ -42,7 +58,21 @@ function stringProductLabel(value: StringLineValues): string {
  * switching to Customer Supplied clears the link and falls back to the
  * original Phase 4 free-text fields — customer-supplied string is never
  * connected to inventory (brief §15), so there's nothing to search. */
-function StringLineFields({ label, value, onChange, includeTension }: { label: string; value: StringLineValues; onChange: (patch: Partial<StringLineValues>) => void; includeTension?: boolean }) {
+function StringLineFields({
+  label,
+  value,
+  onChange,
+  includeTension,
+  usageField,
+  suggestedUsage,
+}: {
+  label: string;
+  value: StringLineValues;
+  onChange: (patch: Partial<StringLineValues>) => void;
+  includeTension?: boolean;
+  usageField: UsageField;
+  suggestedUsage: SuggestedStringUsage | null;
+}) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <div className="lab">{label}</div>
@@ -95,7 +125,7 @@ function StringLineFields({ label, value, onChange, includeTension }: { label: s
             }
           />
           {value.stringProductId ? (
-            <Field label="Length used" htmlFor={`qty-${label}`} hint={value.usageUnit === "set" ? "Whole sets consumed" : "Actual length strung, in metres"}>
+            <Field label="Length used" htmlFor={`qty-${label}`} hint={suggestionHint(suggestedUsage, usageField, value.usageUnit) ?? (value.usageUnit === "set" ? "Whole sets consumed" : "Actual length strung, in metres")}>
               <Input
                 id={`qty-${label}`}
                 type="number"
@@ -126,24 +156,26 @@ export function StringSetupSection({
   cross,
   onMainChange,
   onCrossChange,
+  suggestedUsage,
 }: {
   setupType: "full" | "hybrid";
   main: StringLineValues;
   cross: StringLineValues;
   onMainChange: (patch: Partial<StringLineValues>) => void;
   onCrossChange: (patch: Partial<StringLineValues>) => void;
+  suggestedUsage: SuggestedStringUsage | null;
 }) {
   if (setupType === "hybrid") {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-        <StringLineFields label="Main" value={main} onChange={onMainChange} includeTension />
-        <StringLineFields label="Cross" value={cross} onChange={onCrossChange} includeTension />
+        <StringLineFields label="Main" value={main} onChange={onMainChange} includeTension usageField="main" suggestedUsage={suggestedUsage} />
+        <StringLineFields label="Cross" value={cross} onChange={onCrossChange} includeTension usageField="cross" suggestedUsage={suggestedUsage} />
       </div>
     );
   }
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      <StringLineFields label="String" value={main} onChange={onMainChange} />
+      <StringLineFields label="String" value={main} onChange={onMainChange} usageField="fullBed" suggestedUsage={suggestedUsage} />
       <div className="form-grid">
         <TensionField label="Main tension" value={main.tension} unit={main.tensionUnit} onChange={(tension, tensionUnit) => onMainChange({ tension, tensionUnit })} />
         <TensionField label="Cross tension" value={cross.tension} unit={cross.tensionUnit} onChange={(tension, tensionUnit) => onCrossChange({ tension, tensionUnit })} />

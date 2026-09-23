@@ -36,6 +36,9 @@ function readValues(formData: FormData): ModelFormValues {
     standardLengthIn: get("standardLengthIn"),
     recommendedTensionMinLbs: get("recommendedTensionMinLbs"),
     recommendedTensionMaxLbs: get("recommendedTensionMaxLbs"),
+    recommendedFullBedLengthM: get("recommendedFullBedLengthM"),
+    recommendedMainLengthM: get("recommendedMainLengthM"),
+    recommendedCrossLengthM: get("recommendedCrossLengthM"),
     notes: get("notes"),
   };
 }
@@ -60,6 +63,9 @@ function toInput(values: ModelFormValues): RacketModelInput {
     standardLengthIn: values.standardLengthIn || null,
     recommendedTensionMinLbs: values.recommendedTensionMinLbs || null,
     recommendedTensionMaxLbs: values.recommendedTensionMaxLbs || null,
+    recommendedFullBedLengthM: values.recommendedFullBedLengthM || null,
+    recommendedMainLengthM: values.recommendedMainLengthM || null,
+    recommendedCrossLengthM: values.recommendedCrossLengthM || null,
     notes: values.notes || null,
   };
 }

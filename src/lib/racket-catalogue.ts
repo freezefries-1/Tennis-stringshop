@@ -106,6 +106,12 @@ export interface RacketModelInput {
   standardLengthIn?: string | null;
   recommendedTensionMinLbs?: string | null;
   recommendedTensionMaxLbs?: string | null;
+  // This specific racket's own recommended string usage — optional, takes
+  // priority over the pattern default in getSuggestedStringUsage()
+  // (src/lib/string-usage.ts) when set.
+  recommendedFullBedLengthM?: string | null;
+  recommendedMainLengthM?: string | null;
+  recommendedCrossLengthM?: string | null;
   notes?: string | null;
 }
 
@@ -120,6 +126,9 @@ function cleanModelInput(input: RacketModelInput) {
     stringPatternCrosses: input.stringPatternCrosses ?? null,
     unstrungWeightG: input.unstrungWeightG ?? null,
     standardBalanceMm: input.standardBalanceMm ?? null,
+    recommendedFullBedLengthM: input.recommendedFullBedLengthM?.trim() || null,
+    recommendedMainLengthM: input.recommendedMainLengthM?.trim() || null,
+    recommendedCrossLengthM: input.recommendedCrossLengthM?.trim() || null,
     standardLengthIn: input.standardLengthIn?.trim() || null,
     recommendedTensionMinLbs: input.recommendedTensionMinLbs?.trim() || null,
     recommendedTensionMaxLbs: input.recommendedTensionMaxLbs?.trim() || null,

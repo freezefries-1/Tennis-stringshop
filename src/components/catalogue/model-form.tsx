@@ -220,6 +220,20 @@ export function ModelForm({
               </div>
             </Field>
           </div>
+          <div className="form-grid">
+            <Field label="Recommended full bed length" htmlFor="recommendedFullBedLengthM" hint="Optional — used to suggest usage on new full-bed jobs for this racket">
+              <Input id="recommendedFullBedLengthM" name="recommendedFullBedLengthM" type="number" step="0.1" defaultValue={v.recommendedFullBedLengthM} placeholder="e.g. 10.8" suffix="m" style={{ width: "100%" }} />
+            </Field>
+            <div />
+          </div>
+          <div className="form-grid">
+            <Field label="Recommended main length" htmlFor="recommendedMainLengthM" hint="Optional — hybrid/two-piece jobs">
+              <Input id="recommendedMainLengthM" name="recommendedMainLengthM" type="number" step="0.1" defaultValue={v.recommendedMainLengthM} placeholder="e.g. 5.8" suffix="m" style={{ width: "100%" }} />
+            </Field>
+            <Field label="Recommended cross length" htmlFor="recommendedCrossLengthM" hint="Optional — hybrid/two-piece jobs">
+              <Input id="recommendedCrossLengthM" name="recommendedCrossLengthM" type="number" step="0.1" defaultValue={v.recommendedCrossLengthM} placeholder="e.g. 5.0" suffix="m" style={{ width: "100%" }} />
+            </Field>
+          </div>
           <Field label="Notes" htmlFor="notes">
             <textarea id="notes" name="notes" defaultValue={v.notes} />
           </Field>

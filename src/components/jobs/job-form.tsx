@@ -14,20 +14,27 @@ import { KnotsSelector } from "./knots-selector";
 import { racketLabel } from "@/lib/racket-label";
 import { formatCents, formatDate } from "@/lib/format";
 import type { RacketWithSpecs } from "@/lib/rackets";
-import { fetchPreviousSetup } from "@/app/jobs/actions";
+import { fetchPreviousSetup, fetchSuggestedStringUsage } from "@/app/jobs/actions";
 import type { PreviousJobSetup } from "@/lib/jobs";
+import type { SuggestedStringUsage } from "@/lib/string-usage";
 import { applyRepeatToValues, type JobFormState, type JobFormValues, type StringUsageDefaultsView } from "@/lib/job-form-types";
 
-/** Fills in a still-blank usage field from Settings' defaults (brief §12) —
- * never overwrites something the user already typed, repeated from a
- * previous job, or that came back from a rejected submit. */
-function withUsageDefaults(values: JobFormValues, defaults: StringUsageDefaultsView): JobFormValues {
+/** Fills in a still-blank usage field with the suggested length (brief:
+ * racket model → string pattern → global default priority, resolved by
+ * fetchSuggestedStringUsage) — never overwrites something the user already
+ * typed, repeated from a previous job, or that came back from a rejected
+ * submit. Falls back to the flat global default only while the per-racket
+ * suggestion hasn't loaded yet (or has nothing to say, e.g. no racket). */
+function withSuggestedUsage(values: JobFormValues, suggestion: SuggestedStringUsage | null, fallback: StringUsageDefaultsView): JobFormValues {
+  const fullBedM = suggestion?.fullBedM ?? fallback.fullBedUsageM;
+  const mainM = suggestion?.mainM ?? fallback.mainUsageM;
+  const crossM = suggestion?.crossM ?? fallback.crossUsageM;
   if (values.setupType === "full") {
     if (values.main.customerSupplied || values.main.quantityUsed) return values;
-    return { ...values, main: { ...values.main, quantityUsed: String(defaults.fullBedUsageM) } };
+    return { ...values, main: { ...values.main, quantityUsed: String(fullBedM) } };
   }
-  const main = !values.main.customerSupplied && !values.main.quantityUsed ? { ...values.main, quantityUsed: String(defaults.mainUsageM) } : values.main;
-  const cross = !values.cross.customerSupplied && !values.cross.quantityUsed ? { ...values.cross, quantityUsed: String(defaults.crossUsageM) } : values.cross;
+  const main = !values.main.customerSupplied && !values.main.quantityUsed ? { ...values.main, quantityUsed: String(mainM) } : values.main;
+  const cross = !values.cross.customerSupplied && !values.cross.quantityUsed ? { ...values.cross, quantityUsed: String(crossM) } : values.cross;
   return { ...values, main, cross };
 }
 
@@ -106,8 +113,13 @@ export function JobForm({
   const [state, formAction] = useActionState(action, initialState);
   const [customer, setCustomer] = useState<PickerCustomer | null>(initialCustomer);
   const [racket, setRacket] = useState<RacketWithSpecs | null>(initialRacket);
-  const [values, setValues] = useState<JobFormValues>(initialRacket ? withUsageDefaults(state.values, stringUsageDefaults) : state.values);
+  const [values, setValues] = useState<JobFormValues>(state.values);
   const [previousSetup, setPreviousSetup] = useState<PreviousJobSetup | null | undefined>(undefined);
+  // The real per-racket suggestion (model → pattern → global), fetched
+  // below — null until it resolves (or if there's no racket yet), in which
+  // case withSuggestedUsage falls back to the flat global default so the
+  // form is never left completely blank while waiting.
+  const [suggestedUsage, setSuggestedUsage] = useState<SuggestedStringUsage | null>(null);
   // Flips on synchronously wherever the racket selection changes (the
   // onSelect handlers below), not here — set-state-in-effect only allows
   // async updates (inside .then()) in the effect body itself.
@@ -121,14 +133,17 @@ export function JobForm({
   useEffect(() => {
     if (!racket) return;
     let cancelled = false;
-    fetchPreviousSetup(racket.id, jobId).then((setup) => {
+    Promise.all([fetchPreviousSetup(racket.id, jobId), fetchSuggestedStringUsage(racket.id)]).then(([setup, suggestion]) => {
       if (!cancelled) {
         setPreviousSetup(setup);
+        setSuggestedUsage(suggestion);
         setLoadingPrevious(false);
         // A found previous setup is only applied if/when the user clicks
         // "Repeat previous setup" below — either way, a still-blank usage
-        // field gets Settings' default as a starting point now.
-        setValues((v) => withUsageDefaults(v, stringUsageDefaults));
+        // field gets the suggested length (this racket's own recommended
+        // length, else its string pattern's default, else the global
+        // default) as a starting point now.
+        setValues((v) => withSuggestedUsage(v, suggestion, stringUsageDefaults));
       }
     });
     return () => {
@@ -155,7 +170,19 @@ export function JobForm({
   const totalCents = Math.max(0, subtotalCents - discountCents);
 
   const patch = (p: Partial<JobFormValues>) => setValues((v) => ({ ...v, ...p }));
-  const patchSetupType = (setupType: "full" | "hybrid") => setValues((v) => (v.setupType === setupType ? v : withUsageDefaults({ ...v, setupType }, stringUsageDefaults)));
+  const patchSetupType = (setupType: "full" | "hybrid") =>
+    setValues((v) => {
+      if (v.setupType === setupType) return v;
+      // Full bed and hybrid main are different lengths (one string for the
+      // whole racket vs. just the mains) — if main's quantity still holds
+      // the OTHER mode's own suggestion untouched, clear it first so
+      // withSuggestedUsage re-suggests the right amount for the new mode
+      // instead of carrying over a stale one. A value the user actually
+      // edited (no longer matching either mode's suggestion) is left alone.
+      const previousSuggestedM = v.setupType === "full" ? (suggestedUsage?.fullBedM ?? stringUsageDefaults.fullBedUsageM) : (suggestedUsage?.mainM ?? stringUsageDefaults.mainUsageM);
+      const main = v.main.quantityUsed !== "" && Number(v.main.quantityUsed) === previousSuggestedM ? { ...v.main, quantityUsed: "" } : v.main;
+      return withSuggestedUsage({ ...v, setupType, main }, suggestedUsage, stringUsageDefaults);
+    });
 
   return (
     <form ref={formRef} action={formAction} className="job-layout">
@@ -292,6 +319,7 @@ export function JobForm({
               cross={values.cross}
               onMainChange={(p) => patch({ main: { ...values.main, ...p } })}
               onCrossChange={(p) => patch({ cross: { ...values.cross, ...p } })}
+              suggestedUsage={suggestedUsage}
             />
             <KnotsSelector value={values.numberOfKnots} onChange={(v) => patch({ numberOfKnots: v })} />
             <Field label="Pre-stretch">
