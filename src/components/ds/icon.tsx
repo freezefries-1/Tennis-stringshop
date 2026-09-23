@@ -29,6 +29,7 @@ import {
   Home,
   Archive,
   RotateCcw,
+  AlertCircle,
   type LucideIcon,
 } from "lucide-react";
 
@@ -63,6 +64,7 @@ const ICONS: Record<string, LucideIcon> = {
   home: Home,
   archive: Archive,
   "rotate-ccw": RotateCcw,
+  "alert-circle": AlertCircle,
 };
 
 export interface IconProps {

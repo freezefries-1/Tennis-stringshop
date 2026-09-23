@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { customers, productInventoryMovements, products, saleItems, salePayments, sales, stringInventoryMovements, stringJobs, stringProducts } from "@/db/schema";
 import {
@@ -638,15 +638,11 @@ export interface SaleListRow {
   totalCents: number;
 }
 
-export async function listSales(): Promise<SaleListRow[]> {
-  const rows = await db
-    .select({ sale: sales, customerName: customers.name, stringJobCode: stringJobs.code })
-    .from(sales)
-    .leftJoin(customers, eq(customers.id, sales.customerId))
-    .leftJoin(stringJobs, eq(stringJobs.id, sales.stringJobId))
-    .orderBy(desc(sales.occurredAt));
+/** Shared by every sales-list query below — attaches each row's item
+ * descriptions (for itemSummary) via one batched lookup rather than N+1
+ * queries, same pattern the old unbounded listSales() used. */
+async function attachItemSummaries(rows: { sale: typeof sales.$inferSelect; customerName: string | null; stringJobCode: string | null }[]): Promise<SaleListRow[]> {
   if (rows.length === 0) return [];
-
   const items = await db
     .select({ saleId: saleItems.saleId, description: saleItems.descriptionSnapshot })
     .from(saleItems)
@@ -657,7 +653,6 @@ export async function listSales(): Promise<SaleListRow[]> {
     arr.push(it.description);
     itemsBySale.set(it.saleId, arr);
   }
-
   return rows.map((r) => {
     const descs = itemsBySale.get(r.sale.id) ?? [];
     return {
@@ -675,6 +670,127 @@ export async function listSales(): Promise<SaleListRow[]> {
       totalCents: r.sale.totalCents,
     };
   });
+}
+
+export interface SalesFilters {
+  /** Inclusive lower bound on occurredAt. Null/undefined = no lower bound. */
+  dateFrom?: Date | null;
+  /** Exclusive upper bound on occurredAt. Null/undefined = no upper bound. */
+  dateTo?: Date | null;
+  search?: string | null;
+  paymentStatus?: SalePaymentStatus | null;
+  status?: SaleStatus | null;
+}
+
+/** Every historical Sale is a permanent record (brief: never delete/archive
+ * on month-end) — filtering narrows what's *displayed*, it never narrows
+ * what's searchable. A blank date filter (All time) plus a matching code/
+ * customer/job/item search finds a Sale from any point in history. */
+function baseSalesConditions(filters: SalesFilters) {
+  const conditions = [];
+  if (filters.dateFrom) conditions.push(gte(sales.occurredAt, filters.dateFrom));
+  if (filters.dateTo) conditions.push(lt(sales.occurredAt, filters.dateTo));
+  if (filters.paymentStatus) conditions.push(eq(sales.paymentStatus, filters.paymentStatus));
+  if (filters.status) conditions.push(eq(sales.status, filters.status));
+  const q = filters.search?.trim();
+  if (q) {
+    const like = `%${q}%`;
+    conditions.push(sql`(
+      ${sales.code} ilike ${like}
+      or exists (select 1 from ${customers} c where c.id = ${sales.customerId} and c.name ilike ${like})
+      or exists (select 1 from ${stringJobs} j where j.id = ${sales.stringJobId} and j.code ilike ${like})
+      or exists (select 1 from ${saleItems} si where si.sale_id = ${sales.id} and si.description_snapshot ilike ${like})
+    )`);
+  }
+  return conditions;
+}
+
+export interface SalesPageParams extends SalesFilters {
+  /** 1-indexed. */
+  page: number;
+  pageSize: number;
+}
+
+export interface SalesPageResult {
+  rows: SaleListRow[];
+  totalCount: number;
+}
+
+/** The Sales list's data source — filters and pages entirely in the
+ * database (brief: never fetch everything and filter in the browser).
+ * Newest first, with a stable secondary sort so pagination never skips or
+ * repeats a row when two Sales share a timestamp. */
+export async function listSalesPage(params: SalesPageParams): Promise<SalesPageResult> {
+  const conditions = baseSalesConditions(params);
+  const where = conditions.length ? and(...conditions) : sql`true`;
+
+  const [countRow] = await db.select({ count: sql<string>`count(*)` }).from(sales).where(where);
+  const totalCount = Number(countRow?.count ?? 0);
+
+  const rows = await db
+    .select({ sale: sales, customerName: customers.name, stringJobCode: stringJobs.code })
+    .from(sales)
+    .leftJoin(customers, eq(customers.id, sales.customerId))
+    .leftJoin(stringJobs, eq(stringJobs.id, sales.stringJobId))
+    .where(where)
+    .orderBy(desc(sales.occurredAt), desc(sales.code))
+    .limit(params.pageSize)
+    .offset((params.page - 1) * params.pageSize);
+
+  return { rows: await attachItemSummaries(rows), totalCount };
+}
+
+export interface SalesSummary {
+  /** Primary transactions only (a return isn't its own "sale" — it's a
+   * reversal of one already counted) that occurred, weren't cancelled. */
+  saleCount: number;
+  /** Sum of totalCents across primary sales AND their reversing entries —
+   * a return's negative totalCents nets straight out of this, so it's
+   * already "net", never gross transaction volume (brief requirement). */
+  netRevenueCents: number;
+  /** Same netting logic, summed from sale_items.cogsAmountCents (a
+   * reversal's line items carry negative COGS proportional to what was
+   * returned — see returnSaleItem). */
+  cogsCents: number;
+  /** netRevenueCents - cogsCents, derived rather than summed separately so
+   * it can never drift out of sync with the two numbers it's built from. */
+  grossProfitCents: number;
+  /** Outstanding balance (totalCents - paid) across primary sales that
+   * aren't fully paid. Reversing entries are excluded — a refund is
+   * already a settled transaction, never itself "unpaid". */
+  unpaidCents: number;
+}
+
+/** Cancelled Sales never count toward any of these — a cancellation means
+ * the transaction never actually happened, so its totalCents was never
+ * real revenue, regardless of which status filter is currently applied to
+ * the list (viewing only Cancelled sales correctly shows $0 here). */
+export async function getSalesSummary(filters: SalesFilters): Promise<SalesSummary> {
+  const conditions = [sql`${sales.status} != 'cancelled'`, ...baseSalesConditions(filters)];
+  const where = and(...conditions);
+  const primaryWhere = and(...conditions, isNull(sales.reversesSaleId));
+
+  const [[revenueRow], [countRow], [cogsRow], unpaidRows] = await Promise.all([
+    db.select({ total: sql<string>`coalesce(sum(${sales.totalCents}), 0)` }).from(sales).where(where),
+    db.select({ count: sql<string>`count(*)` }).from(sales).where(primaryWhere),
+    db.select({ cogs: sql<string>`coalesce(sum(${saleItems.cogsAmountCents}), 0)` }).from(saleItems).innerJoin(sales, eq(sales.id, saleItems.saleId)).where(where),
+    db
+      .select({ id: sales.id, totalCents: sales.totalCents, paidCents: sql<string>`coalesce(sum(${salePayments.amountCents}), 0)` })
+      .from(sales)
+      .leftJoin(salePayments, eq(salePayments.saleId, sales.id))
+      .where(primaryWhere)
+      .groupBy(sales.id, sales.totalCents),
+  ]);
+
+  const netRevenueCents = Number(revenueRow?.total ?? 0);
+  const cogsCents = Number(cogsRow?.cogs ?? 0);
+  return {
+    saleCount: Number(countRow?.count ?? 0),
+    netRevenueCents,
+    cogsCents,
+    grossProfitCents: netRevenueCents - cogsCents,
+    unpaidCents: unpaidRows.reduce((sum, r) => sum + Math.max(0, r.totalCents - Number(r.paidCents)), 0),
+  };
 }
 
 export interface SaleDetail extends Sale {
@@ -776,10 +892,20 @@ export interface CustomerPurchaseRow {
 /** Powers the customer profile's Purchase history tab — every Sale linked
  * to this customer, including string-job sales (kept separate from
  * Stringing history on the same profile, which stays the operational
- * view — brief §39). */
+ * view — brief §39). Unbounded and undated on purpose: a customer's
+ * history stays visible in full regardless of how old it is (the Sales
+ * list's date filter/pagination is a display concern for that page only,
+ * never a reason a Sale becomes unreachable elsewhere). */
 export async function listSalesForCustomer(customerId: string): Promise<CustomerPurchaseRow[]> {
-  const rows = await listSales();
-  return rows.filter((r) => r.customerId === customerId).map((r) => ({ id: r.id, code: r.code, occurredAt: r.occurredAt, itemSummary: r.itemSummary, totalCents: r.totalCents, paymentStatus: r.paymentStatus, status: r.status }));
+  const rows = await db
+    .select({ sale: sales, customerName: customers.name, stringJobCode: stringJobs.code })
+    .from(sales)
+    .leftJoin(customers, eq(customers.id, sales.customerId))
+    .leftJoin(stringJobs, eq(stringJobs.id, sales.stringJobId))
+    .where(eq(sales.customerId, customerId))
+    .orderBy(desc(sales.occurredAt), desc(sales.code));
+  const withItems = await attachItemSummaries(rows);
+  return withItems.map((r) => ({ id: r.id, code: r.code, occurredAt: r.occurredAt, itemSummary: r.itemSummary, totalCents: r.totalCents, paymentStatus: r.paymentStatus, status: r.status }));
 }
 
 export interface ProductSaleRow {
@@ -853,8 +979,8 @@ export interface RecentSaleRow {
 }
 
 export async function listRecentSales(limit = 8): Promise<RecentSaleRow[]> {
-  const rows = await listSales();
-  return rows.slice(0, limit).map((r) => ({ id: r.id, code: r.code, occurredAt: r.occurredAt, customerName: r.customerName, itemSummary: r.itemSummary, totalCents: r.totalCents, paymentStatus: r.paymentStatus }));
+  const { rows } = await listSalesPage({ page: 1, pageSize: limit });
+  return rows.map((r) => ({ id: r.id, code: r.code, occurredAt: r.occurredAt, customerName: r.customerName, itemSummary: r.itemSummary, totalCents: r.totalCents, paymentStatus: r.paymentStatus }));
 }
 
 // -- picker helper -----------------------------------------------------------
