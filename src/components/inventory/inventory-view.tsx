@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Input } from "@/components/ds/input";
 import { Card } from "@/components/ds/card";
 import { Badge } from "@/components/ds/badge";
-import { formatMoney0 } from "@/lib/format";
+import { formatCents, formatMoney0 } from "@/lib/format";
 import { ExportCsvButtons } from "./export-csv-buttons";
 import type { InventorySummary, StringProductRow } from "@/lib/string-inventory";
 
@@ -22,6 +22,13 @@ const STATUS_TONE: Record<StringProductRow["status"], "success" | "warning" | "d
 
 function productLabel(p: StringProductRow): string {
   return [p.brand, p.name, p.gauge ? `${p.gauge}mm` : null, p.colour].filter(Boolean).join(" ");
+}
+
+/** Weighted average cost of the stock actually remaining (brief §28/§30's
+ * "Average / Relevant Cost") — never the latest purchase price. */
+function costLabel(p: StringProductRow): string {
+  if (p.avgCostPerUnitCents == null) return "—";
+  return `${formatCents(p.avgCostPerUnitCents)}/${p.trackingUnit === "set" ? "set" : "m"}`;
 }
 
 export function InventoryView({ products, summary, brands, materials }: { products: StringProductRow[]; summary: InventorySummary; brands: string[]; materials: string[] }) {
@@ -115,6 +122,7 @@ export function InventoryView({ products, summary, brands, materials }: { produc
                     <th>Colour</th>
                     <th className="num">Stock available</th>
                     <th>Type</th>
+                    <th className="num">Cost</th>
                     <th>Status</th>
                   </tr>
                 </thead>
@@ -132,6 +140,7 @@ export function InventoryView({ products, summary, brands, materials }: { produc
                         {p.trackingUnit === "set" ? " sets" : "m"}
                       </td>
                       <td>{p.trackingUnit === "set" ? "Sets" : "Reel"}</td>
+                      <td className="num">{costLabel(p)}</td>
                       <td>
                         <Badge tone={STATUS_TONE[p.status]} dot>
                           {STATUS_LABEL[p.status]}
@@ -160,6 +169,10 @@ export function InventoryView({ products, summary, brands, materials }: { produc
                       {p.available}
                       {p.trackingUnit === "set" ? " sets" : "m"}
                     </span>
+                  </div>
+                  <div className="ccard-stat">
+                    <span className="lab">Cost</span>
+                    <span className="num">{costLabel(p)}</span>
                   </div>
                   <div className="ccard-stat">
                     <span className="lab">Status</span>

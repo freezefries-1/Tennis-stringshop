@@ -124,19 +124,28 @@ export interface StockSummary {
   status: "in_stock" | "low_stock" | "out_of_stock";
 }
 
-async function stockSummaries(productIds: string[]): Promise<Map<string, { available: number; activeBatches: number }>> {
-  const map = new Map<string, { available: number; activeBatches: number }>();
+async function stockSummaries(productIds: string[]): Promise<Map<string, { available: number; activeBatches: number; avgCostPerUnitCents: number | null }>> {
+  const map = new Map<string, { available: number; activeBatches: number; avgCostPerUnitCents: number | null }>();
   if (productIds.length === 0) return map;
   const rows = await db
     .select({
       productId: stringInventoryBatches.stringProductId,
       available: sql<string>`coalesce(sum(${stringInventoryBatches.remainingQuantity}), 0)`,
       activeBatches: sql<number>`count(*) filter (where ${stringInventoryBatches.remainingQuantity} > 0)::int`,
+      // The remaining value of stock on hand divided by how much is left —
+      // never the latest purchase price, so a product with older cheaper
+      // stock and newer pricier stock shows what it's actually worth right
+      // now (brief §30/§28's "Average / Relevant Cost" column).
+      value: sql<string>`coalesce(sum(${stringInventoryBatches.remainingQuantity} * ${stringInventoryBatches.costPerUnitCents}), 0)`,
     })
     .from(stringInventoryBatches)
     .where(inArray(stringInventoryBatches.stringProductId, productIds))
     .groupBy(stringInventoryBatches.stringProductId);
-  for (const r of rows) map.set(r.productId, { available: Number(r.available), activeBatches: r.activeBatches });
+  for (const r of rows) {
+    const available = Number(r.available);
+    const avgCostPerUnitCents = available > 0 ? Number(r.value) / available : null;
+    map.set(r.productId, { available, activeBatches: r.activeBatches, avgCostPerUnitCents });
+  }
   return map;
 }
 
@@ -151,6 +160,9 @@ export interface StringProductRow extends StringProduct {
   activeBatches: number;
   status: StockSummary["status"];
   effectiveThreshold: string;
+  /** Weighted average cost per unit across remaining batches (cents) —
+   * null when there's no stock left to value. */
+  avgCostPerUnitCents: number | null;
 }
 
 export interface StringProductFilters {
@@ -185,9 +197,9 @@ export async function listStringProducts(filters: StringProductFilters = {}): Pr
   const summaries = await stockSummaries(rows.map((r) => r.id));
 
   const withStock = rows.map((r) => {
-    const s = summaries.get(r.id) ?? { available: 0, activeBatches: 0 };
+    const s = summaries.get(r.id) ?? { available: 0, activeBatches: 0, avgCostPerUnitCents: null };
     const threshold = r.lowStockThreshold != null ? Number(r.lowStockThreshold) : r.trackingUnit === "set" ? defaults.lowStockThresholdSets : defaults.lowStockThresholdM;
-    return { ...r, available: s.available.toFixed(2), activeBatches: s.activeBatches, status: stockStatus(s.available, threshold), effectiveThreshold: threshold.toFixed(2) };
+    return { ...r, available: s.available.toFixed(2), activeBatches: s.activeBatches, status: stockStatus(s.available, threshold), effectiveThreshold: threshold.toFixed(2), avgCostPerUnitCents: s.avgCostPerUnitCents };
   });
 
   return filters.status ? withStock.filter((r) => r.status === filters.status) : withStock;
@@ -198,9 +210,9 @@ export async function getStringProduct(id: string): Promise<StringProductRow | n
   if (!row) return null;
   const defaults = await getInventoryDefaults();
   const summaries = await stockSummaries([id]);
-  const s = summaries.get(id) ?? { available: 0, activeBatches: 0 };
+  const s = summaries.get(id) ?? { available: 0, activeBatches: 0, avgCostPerUnitCents: null };
   const threshold = row.lowStockThreshold != null ? Number(row.lowStockThreshold) : row.trackingUnit === "set" ? defaults.lowStockThresholdSets : defaults.lowStockThresholdM;
-  return { ...row, available: s.available.toFixed(2), activeBatches: s.activeBatches, status: stockStatus(s.available, threshold), effectiveThreshold: threshold.toFixed(2) };
+  return { ...row, available: s.available.toFixed(2), activeBatches: s.activeBatches, status: stockStatus(s.available, threshold), effectiveThreshold: threshold.toFixed(2), avgCostPerUnitCents: s.avgCostPerUnitCents };
 }
 
 /** For the SportCraft Stock string picker on a job — active products only,
