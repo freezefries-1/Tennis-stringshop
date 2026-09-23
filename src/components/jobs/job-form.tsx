@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { Field } from "@/components/ds/field";
 import { Input } from "@/components/ds/input";
@@ -222,12 +222,19 @@ export function JobForm({
       <input type="hidden" name="cross.usageUnit" value={values.cross.usageUnit} />
       <input type="hidden" name="servicesCount" value={values.services.length} />
       {values.services.map((s, i) => (
-        <span key={i}>
+        // Fragment, not a <span> — the form itself is a CSS grid
+        // (.job-layout, two columns), so a real element here becomes a
+        // grid item and throws off auto-placement of .job-layout-main /
+        // .job-layout-side the moment the service count's parity changes
+        // (an odd vs even number of these wrappers shifts which column
+        // each lands in). A Fragment renders no DOM node, so it can never
+        // participate in the grid regardless of how many services there are.
+        <Fragment key={i}>
           <input type="hidden" name={`services[${i}].serviceName`} value={s.serviceName} />
           <input type="hidden" name={`services[${i}].quantity`} value={s.quantity} />
           <input type="hidden" name={`services[${i}].unitPrice`} value={s.unitPrice} />
           <input type="hidden" name={`services[${i}].notes`} value={s.notes} />
-        </span>
+        </Fragment>
       ))}
 
       <div className="job-layout-main">
