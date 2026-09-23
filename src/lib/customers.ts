@@ -27,15 +27,19 @@ function normalizePhone(phone: string) {
 }
 
 /** All non-archived customers, with counts/spend/last-visit rolled up from
- * their rackets, string jobs and sales. String jobs and sales are real
- * queries against real (currently empty, pre-Phase-4/6) tables — they read
- * as zero/empty today and start reporting real numbers once those phases
- * land, with no change needed here. */
+ * their rackets, string jobs and sales. lifetimeSpendCents is Sales'
+ * totalCents PLUS finalPriceCents from any completed job that never got a
+ * linked Sale — i.e. one finished before Phase 6 shipped, when a completed
+ * job started creating its own Sale automatically. Every job from Phase 6
+ * onward already has that link, so its revenue is already inside the Sales
+ * sum; adding finalPriceCents for those too would double-count it. Only
+ * orphaned (saleId is null) completed/collected jobs are ever added here —
+ * see sales.ts's revenue-recognition comment for the rest of this rule. */
 export async function listCustomers(): Promise<CustomerListRow[]> {
   const rows = await db.select().from(customers).where(isNull(customers.archivedAt)).orderBy(desc(customers.createdAt));
   if (rows.length === 0) return [];
 
-  const [racketCounts, jobStats, saleStats] = await Promise.all([
+  const [racketCounts, jobStats, saleStats, unlinkedJobStats] = await Promise.all([
     db
       .select({ customerId: customerRackets.customerId, count: sql<number>`count(*)::int` })
       .from(customerRackets)
@@ -59,11 +63,17 @@ export async function listCustomers(): Promise<CustomerListRow[]> {
       .from(sales)
       .where(sql`${sales.customerId} is not null`)
       .groupBy(sales.customerId),
+    db
+      .select({ customerId: stringJobs.customerId, total: sql<number>`coalesce(sum(${stringJobs.finalPriceCents}),0)::int` })
+      .from(stringJobs)
+      .where(sql`${stringJobs.saleId} is null and ${stringJobs.status} in ('completed', 'collected')`)
+      .groupBy(stringJobs.customerId),
   ]);
 
   const racketMap = new Map(racketCounts.map((r) => [r.customerId, r.count]));
   const jobMap = new Map(jobStats.map((r) => [r.customerId, { count: r.count, lastVisit: r.lastVisit }]));
   const saleMap = new Map(saleStats.map((r) => [r.customerId, { total: r.total, lastVisit: r.lastVisit }]));
+  const unlinkedJobMap = new Map(unlinkedJobStats.map((r) => [r.customerId, r.total]));
 
   return rows.map((c) => {
     const job = jobMap.get(c.id);
@@ -78,7 +88,7 @@ export async function listCustomers(): Promise<CustomerListRow[]> {
       email: c.email,
       racketCount: racketMap.get(c.id) ?? 0,
       jobCount: job?.count ?? 0,
-      lifetimeSpendCents: sale?.total ?? 0,
+      lifetimeSpendCents: (sale?.total ?? 0) + (unlinkedJobMap.get(c.id) ?? 0),
       lastVisit,
       createdAt: c.createdAt,
     };
@@ -141,10 +151,12 @@ export async function updateCustomer(id: string, input: CustomerInput) {
   return row ?? null;
 }
 
-/** Stats for a single customer profile — same real, currently-empty queries
- * as listCustomers, just scoped to one row. */
+/** Stats for a single customer profile — same rollups as listCustomers,
+ * just scoped to one row (see its comment for the lifetimeSpendCents
+ * rule: Sales totals plus any pre-Phase-6 completed job that never got a
+ * linked Sale, never double-adding a job that already has one). */
 export async function getCustomerStats(id: string) {
-  const [[jobRow], [saleRow]] = await Promise.all([
+  const [[jobRow], [saleRow], [unlinkedJobRow]] = await Promise.all([
     db
       .select({ count: sql<number>`count(*)::int`, lastVisit: sql<Date | null>`max(${stringJobs.completedAt})` })
       .from(stringJobs)
@@ -153,11 +165,15 @@ export async function getCustomerStats(id: string) {
       .select({ total: sql<number>`coalesce(sum(${sales.totalCents}),0)::int`, lastVisit: sql<Date | null>`max(${sales.occurredAt})` })
       .from(sales)
       .where(sql`${sales.customerId} = ${id}`),
+    db
+      .select({ total: sql<number>`coalesce(sum(${stringJobs.finalPriceCents}),0)::int` })
+      .from(stringJobs)
+      .where(sql`${stringJobs.customerId} = ${id} and ${stringJobs.saleId} is null and ${stringJobs.status} in ('completed', 'collected')`),
   ]);
   const visits = [jobRow?.lastVisit, saleRow?.lastVisit].filter((d): d is Date => d != null);
   return {
     jobCount: jobRow?.count ?? 0,
-    lifetimeSpendCents: saleRow?.total ?? 0,
+    lifetimeSpendCents: (saleRow?.total ?? 0) + (unlinkedJobRow?.total ?? 0),
     lastVisit: visits.length ? new Date(Math.max(...visits.map((d) => +new Date(d)))) : null,
   };
 }
