@@ -150,11 +150,21 @@ export function FinancialsView({
             ) is money in that isn&rsquo;t Sales revenue — e.g. selling old equipment — kept separate so it&rsquo;s never confused with Sales.
           </div>
         ) : null}
-        {summary.capitalExpensesCents > 0 ? (
-          <div className="row-s" style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--border-hairline)" }}>
-            Capital / equipment purchases in this period: <strong>{formatCents(summary.capitalExpensesCents)}</strong>. Shown for visibility only — not subtracted from Net Profit (no depreciation schedule yet).
+
+        <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--border-hairline)" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 16 }}>
+            <StatBlock label="Capital / equipment purchases" value={formatCents(summary.capitalExpensesCents)} icon="package" />
+            <StatBlock
+              label="Overall profit"
+              value={<span style={{ color: summary.overallProfitCents < 0 ? "var(--signal-danger)" : undefined }}>{formatCentsSigned(summary.overallProfitCents)}</span>}
+              unit={pctLabel(summary.overallMarginPct)}
+              icon="trending-up"
+            />
           </div>
-        ) : null}
+          <div className="row-s" style={{ marginTop: 10 }}>
+            Overall profit = Net profit − Capital/equipment purchases — the &ldquo;everything counted&rdquo; bottom line, including money spent on equipment (which Net profit leaves out so one big purchase doesn&rsquo;t skew a single month). Check <strong>this</strong> figure, not Net profit, over All time or a full year to see whether the business has broken even.
+          </div>
+        </div>
       </Card>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>

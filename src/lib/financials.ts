@@ -48,10 +48,19 @@ import { getOtherIncomeTotalCents } from "./other-income";
 //
 // NET PROFIT = GROSS PROFIT - OPERATING EXPENSES + OTHER INCOME.
 //
-// Neither margin is ever computed against a zero-revenue denominator —
-// both come back `null` (not 0, not NaN, not clamped) when
-// netSalesRevenueCents is 0, and the UI shows "—" rather than a
-// misleading 0.0%.
+// OVERALL PROFIT = NET PROFIT - CAPITAL EXPENSES. A second, "everything
+// counted" bottom line — Net Profit deliberately leaves capital purchases
+// out so one big equipment buy doesn't wreck a single month's comparison,
+// but that same exclusion means Net Profit alone overstates the business
+// if you're asking a whole-business question like "have I broken even" —
+// it would count the CASH IN from selling an old machine (via Other
+// Income) without ever counting the CASH OUT from buying one. Overall
+// Profit puts both sides back in, so it's the figure to check breakeven
+// against, especially over All time/YTD rather than a single month.
+//
+// No margin is ever computed against a zero-revenue denominator — each
+// comes back `null` (not 0, not NaN, not clamped) when netSalesRevenueCents
+// is 0, and the UI shows "—" rather than a misleading 0.0%.
 
 const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -103,6 +112,12 @@ export interface FinancialSummary {
   otherIncomeCents: number;
   netProfitCents: number;
   netMarginPct: number | null;
+  /** netProfitCents - capitalExpensesCents — the "everything counted"
+   * bottom line, including capital purchases (which netProfitCents leaves
+   * out on purpose). This is the figure to check whole-business breakeven
+   * against, not netProfitCents (see file comment). */
+  overallProfitCents: number;
+  overallMarginPct: number | null;
   /** Outstanding balance on unpaid/partially-paid primary sales in range —
    * a receivable, not revenue and not an expense; never changes netProfit. */
   outstandingCents: number;
@@ -130,8 +145,10 @@ export async function getFinancialSummary(filters: FinancialsFilters): Promise<F
   ]);
 
   const netProfitCents = salesSummary.grossProfitCents - expenseSummary.operatingTotalCents + otherIncomeCents;
+  const overallProfitCents = netProfitCents - expenseSummary.capitalTotalCents;
   const grossMarginPct = salesSummary.netRevenueCents !== 0 ? (salesSummary.grossProfitCents / salesSummary.netRevenueCents) * 100 : null;
   const netMarginPct = salesSummary.netRevenueCents !== 0 ? (netProfitCents / salesSummary.netRevenueCents) * 100 : null;
+  const overallMarginPct = salesSummary.netRevenueCents !== 0 ? (overallProfitCents / salesSummary.netRevenueCents) * 100 : null;
   const pctRevenueWithKnownCogs = salesSummary.netRevenueCents !== 0 ? ((salesSummary.netRevenueCents - unknownCogsRevenueCents) / salesSummary.netRevenueCents) * 100 : null;
 
   return {
@@ -145,6 +162,8 @@ export async function getFinancialSummary(filters: FinancialsFilters): Promise<F
     otherIncomeCents,
     netProfitCents,
     netMarginPct,
+    overallProfitCents,
+    overallMarginPct,
     outstandingCents: salesSummary.unpaidCents,
     paymentsReceivedCents: salesSummary.paymentsReceivedCents,
     revenueWithUnknownCogsCents: unknownCogsRevenueCents,
