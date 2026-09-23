@@ -23,11 +23,15 @@ export const DEFAULT_STRING_USAGE: StringUsageDefaults = {
 export interface InventoryDefaults {
   lowStockThresholdM: number;
   lowStockThresholdSets: number;
+  // Phase 6 — same role as the two above, for general retail products
+  // (src/lib/products.ts) rather than string reels/sets.
+  lowStockThresholdUnits: number;
 }
 
 export const DEFAULT_INVENTORY_SETTINGS: InventoryDefaults = {
   lowStockThresholdM: 20,
   lowStockThresholdSets: 2,
+  lowStockThresholdUnits: 5,
 };
 
 async function getSetting<T>(key: string, fallback: T): Promise<T> {

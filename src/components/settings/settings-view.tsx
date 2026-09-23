@@ -20,7 +20,11 @@ function NumField({ label, hint, value, onChange, suffix }: { label: string; hin
 
 export function SettingsView({ stringUsage, inventory, patternDefaults }: { stringUsage: StringUsageDefaults; inventory: InventoryDefaults; patternDefaults: StringPatternDefault[] }) {
   const [usage, setUsage] = useState({ fullBedUsageM: String(stringUsage.fullBedUsageM), mainUsageM: String(stringUsage.mainUsageM), crossUsageM: String(stringUsage.crossUsageM) });
-  const [inv, setInv] = useState({ lowStockThresholdM: String(inventory.lowStockThresholdM), lowStockThresholdSets: String(inventory.lowStockThresholdSets) });
+  const [inv, setInv] = useState({
+    lowStockThresholdM: String(inventory.lowStockThresholdM),
+    lowStockThresholdSets: String(inventory.lowStockThresholdSets),
+    lowStockThresholdUnits: String(inventory.lowStockThresholdUnits),
+  });
   const [savingUsage, setSavingUsage] = useState(false);
   const [savingInv, setSavingInv] = useState(false);
   const [savedUsage, setSavedUsage] = useState(false);
@@ -78,12 +82,13 @@ export function SettingsView({ stringUsage, inventory, patternDefaults }: { stri
         <div>
           <div className="lab">Inventory defaults</div>
           <p className="row-s" style={{ marginTop: 4 }}>
-            Applied to any string product that doesn&rsquo;t set its own low-stock threshold.
+            Applied to any string or retail product that doesn&rsquo;t set its own low-stock threshold.
           </p>
         </div>
         <div className="form-grid">
           <NumField label="Low stock threshold (reels)" value={inv.lowStockThresholdM} onChange={(v) => setInv((u) => ({ ...u, lowStockThresholdM: v }))} suffix="m" />
           <NumField label="Low stock threshold (sets)" value={inv.lowStockThresholdSets} onChange={(v) => setInv((u) => ({ ...u, lowStockThresholdSets: v }))} suffix="sets" />
+          <NumField label="Low stock threshold (products)" value={inv.lowStockThresholdUnits} onChange={(v) => setInv((u) => ({ ...u, lowStockThresholdUnits: v }))} suffix="units" />
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
           <Button
@@ -96,6 +101,7 @@ export function SettingsView({ stringUsage, inventory, patternDefaults }: { stri
               await saveInventoryDefaultsAction({
                 lowStockThresholdM: Number(inv.lowStockThresholdM) || 0,
                 lowStockThresholdSets: Number(inv.lowStockThresholdSets) || 0,
+                lowStockThresholdUnits: Number(inv.lowStockThresholdUnits) || 0,
               });
               setSavingInv(false);
               setSavedInv(true);

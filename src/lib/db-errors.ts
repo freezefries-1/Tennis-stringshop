@@ -1,4 +1,13 @@
 const FOREIGN_KEY_VIOLATION = "23503";
+const UNIQUE_VIOLATION = "23505";
+
+function codeOf(e: unknown): unknown {
+  return typeof e === "object" && e !== null && "code" in e ? (e as { code?: unknown }).code : undefined;
+}
+
+function causeOf(err: unknown): unknown {
+  return typeof err === "object" && err !== null && "cause" in err ? (err as { cause?: unknown }).cause : undefined;
+}
 
 /** Postgres's FK-violation code, checked against both the thrown error and
  * its `.cause` — drizzle-orm wraps the driver's PostgresError (which
@@ -8,8 +17,16 @@ const FOREIGN_KEY_VIOLATION = "23503";
  * "still in use" result. Shared by every deleteX() that guards against
  * deleting a row something else still references. */
 export function isForeignKeyViolation(err: unknown): boolean {
-  const codeOf = (e: unknown): unknown => (typeof e === "object" && e !== null && "code" in e ? (e as { code?: unknown }).code : undefined);
   if (codeOf(err) === FOREIGN_KEY_VIOLATION) return true;
-  const cause = typeof err === "object" && err !== null && "cause" in err ? (err as { cause?: unknown }).cause : undefined;
-  return codeOf(cause) === FOREIGN_KEY_VIOLATION;
+  return codeOf(causeOf(err)) === FOREIGN_KEY_VIOLATION;
+}
+
+/** Same cause-unwrapping as isForeignKeyViolation, for Postgres's
+ * unique-violation code — used by createSale's idempotency guard (brief
+ * §51): a concurrent duplicate checkout with the same clientRequestId hits
+ * sales.client_request_id's unique constraint instead of creating a second
+ * Sale, and this is how that race is told apart from a genuine error. */
+export function isUniqueViolation(err: unknown): boolean {
+  if (codeOf(err) === UNIQUE_VIOLATION) return true;
+  return codeOf(causeOf(err)) === UNIQUE_VIOLATION;
 }

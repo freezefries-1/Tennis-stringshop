@@ -1,22 +1,22 @@
-// SportCraft — Drizzle schema, stubbed against the design in docs/architecture.html
+// SportCraft — Drizzle schema, matching the design in docs/architecture.html
 // (sections 03–06: database schema, relationships, the no-double-counting revenue
-// rule, and batch-level FIFO reel costing).
-//
-// This is not wired to a live database yet — the dashboard still reads
-// src/lib/data.ts. Once a Supabase/Postgres connection string exists, add
-// `src/db/client.ts` (drizzle(postgres(...))) and drizzle-kit migrations against
-// this file; nothing here should need to change to do that.
+// rule, and batch-level FIFO reel costing). Live against Supabase Postgres via
+// src/db/client.ts since Phase 2.
 //
 // Conventions: money is integer cents, lengths are numeric(10,2) metres, every
 // timestamp is timestamptz. Every customer/job/sale-facing row gets a short code
-// (`C-0231`, `SC-1042`) alongside its uuid primary key. Columns comprising the
-// "snapshot rule" (never recomputed after the transaction) are marked below.
+// (`C0001`, `J0001`, `S0001`) alongside its uuid primary key. Columns comprising
+// the "snapshot rule" (never recomputed after the transaction) are marked below.
 
-import { boolean, date, integer, jsonb, numeric, pgEnum, pgSequence, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { boolean, date, integer, jsonb, numeric, pgEnum, pgSequence, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
 const id = () => uuid("id").defaultRandom().primaryKey();
 const timestamps = { createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull() };
+
+// Shared by string_inventory_batches (Phase 5) and product_inventory_batches
+// (Phase 6) — the same batch lifecycle applies to both kinds of stock.
+export const inventoryBatchStatusEnum = pgEnum("inventory_batch_status", ["active", "depleted", "archived"]);
 
 // Human-readable IDs (C0001, R0001, J0001, ...). A DB sequence keeps
 // generation atomic under concurrent inserts and monotonic even as rows are
@@ -25,6 +25,10 @@ export const customerCodeSeq = pgSequence("customer_code_seq", { startWith: 1, m
 export const racketCodeSeq = pgSequence("racket_code_seq", { startWith: 1, minValue: 1 });
 export const jobCodeSeq = pgSequence("job_code_seq", { startWith: 1, minValue: 1 });
 export const batchCodeSeq = pgSequence("batch_code_seq", { startWith: 1, minValue: 1 });
+// Phase 6
+export const productCodeSeq = pgSequence("product_code_seq", { startWith: 1, minValue: 1 });
+export const productBatchCodeSeq = pgSequence("product_batch_code_seq", { startWith: 1, minValue: 1 });
+export const saleCodeSeq = pgSequence("sale_code_seq", { startWith: 1, minValue: 1 });
 
 // -- people and their frames -------------------------------------------------
 
@@ -171,78 +175,140 @@ export const suppliers = pgTable("suppliers", {
   notes: text("notes"),
 });
 
-// -- general retail catalogue (Phase 6 — unbuilt, kept as originally
-// stubbed in Phase 1; do not extend until Phase 6) -------------------------
-
-export const stockModeEnum = pgEnum("stock_mode", ["unit", "length"]);
+// -- general retail catalogue (Phase 6) -------------------------------------
+//
+// Deliberately separate from string_products/string_inventory_batches
+// (Phase 5) — a string reel/set stays a string_products row and is sold
+// retail by a sale_items row pointing straight at stringProductId, never
+// duplicated into this table (brief §8/§9/§10: "do not create another
+// unrelated stock count for the same string"). `products` here is only for
+// general retail merchandise (balls, grips, paddles, rackets, accessories,
+// apparel, ...) — see PRODUCT_VS_STRING_PRODUCT in src/lib/products.ts for
+// the fuller writeup.
+//
+// Variants (brief §4, e.g. "Wilson Pro Overgrip" in White/Black/Pink) are
+// modelled as separate `products` rows sharing name+brand and differing in
+// `variant` — the same pattern already used for string_products (separate
+// rows per gauge/colour) and racket_models (separate rows per generation),
+// not a nested product_variants table. Keeps one product = one saleable
+// SKU = one inventory count, with no cross-row aggregation needed anywhere
+// else in the schema.
+export const productCategories = pgTable("product_categories", {
+  id: id(),
+  name: text("name").notNull().unique(),
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
+});
 
 export const products = pgTable("products", {
   id: id(),
-  sku: text("sku").notNull().unique(),
+  code: text("code")
+    .notNull()
+    .unique()
+    .default(sql`'P' || lpad(nextval('product_code_seq')::text, 4, '0')`), // P0001
   name: text("name").notNull(),
   brand: text("brand"),
-  category: text("category").notNull(),
+  categoryId: uuid("category_id").notNull().references(() => productCategories.id),
+  // Free text (brief §4/§58) — a distinct colour/size of the same product is
+  // its own row (see the file-level comment above), `variant` just labels
+  // which one this row is ("White", "S", ...).
   variant: text("variant"),
+  sku: text("sku").unique(),
+  barcode: text("barcode").unique(),
+  // The catalogue's own default selling price — same role as
+  // string_products.defaultSellingPriceCents. Actual per-unit COST always
+  // comes from product_inventory_batches (FIFO), never stored here, EXCEPT
+  // costPriceCents below for the one case that has no batch to draw from.
+  defaultSellingPriceCents: integer("default_selling_price_cents"),
+  // Fallback/manual cost — the pre-fill suggestion when receiving this
+  // product's first batch, and the actual COGS source for a
+  // trackInventory=false product (nothing is ever batched for one, so there
+  // is no FIFO cost to draw from).
+  costPriceCents: integer("cost_price_cents"),
+  // Per-product override; falls back to the global default in `settings`
+  // (key "inventory_defaults") when null — same pattern as
+  // string_products.lowStockThreshold.
+  lowStockThreshold: integer("low_stock_threshold"),
   supplierId: uuid("supplier_id").references(() => suppliers.id),
-  stockMode: stockModeEnum("stock_mode").notNull(),
-  unitLabel: text("unit_label").notNull(), // set | reel | pcs
-  sellPriceCents: integer("sell_price_cents").notNull(),
-  reorderLevel: numeric("reorder_level", { precision: 10, scale: 2 }),
-  active: boolean("active").notNull().default(true),
+  // false for a product deliberately sold without stock counts (e.g. a
+  // one-off/miscellaneous catalogue entry) — never gets batches; selling it
+  // never touches inventory and its COGS is costPriceCents flat, not FIFO.
+  trackInventory: boolean("track_inventory").notNull().default(true),
   notes: text("notes"),
-  // length-mode only (string reels/sets)
-  gaugeMm: numeric("gauge_mm", { precision: 4, scale: 2 }),
-  colour: text("colour"),
-  material: text("material"),
-  reelLengthM: numeric("reel_length_m", { precision: 6, scale: 1 }),
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
+  ...timestamps,
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-// unit_cost_cents is per metre for reels, per unit otherwise.
-export const inventoryBatches = pgTable("inventory_batches", {
+// Reuses inventoryBatchStatusEnum (shared with string_inventory_batches,
+// declared near the top of this file) and the same FIFO-batch-costing shape.
+// Quantities are integer, not numeric(10,2): retail products are always
+// whole units (a can, a pack, a paddle), unlike string reels which need
+// fractional metres.
+export const productInventoryBatches = pgTable("product_inventory_batches", {
   id: id(),
+  batchNumber: text("batch_number")
+    .notNull()
+    .unique()
+    .default(sql`'PBATCH-' || lpad(nextval('product_batch_code_seq')::text, 4, '0')`), // PBATCH-0001
   productId: uuid("product_id").notNull().references(() => products.id),
-  receivedAt: timestamp("received_at", { withTimezone: true }).notNull(),
   supplierId: uuid("supplier_id").references(() => suppliers.id),
-  qtyReceived: numeric("qty_received", { precision: 10, scale: 2 }).notNull(),
-  qtyRemaining: numeric("qty_remaining", { precision: 10, scale: 2 }).notNull(),
-  unitCostCents: integer("unit_cost_cents").notNull(), // snapshot at receipt
+  purchaseDate: date("purchase_date").notNull(),
+  purchaseCostCents: integer("purchase_cost_cents").notNull().default(0),
+  originalQuantity: integer("original_quantity").notNull(),
+  remainingQuantity: integer("remaining_quantity").notNull(),
+  // Decimal cents (like string batches) — purchaseCostCents / originalQuantity
+  // is not always a whole number of cents (e.g. $100 / 3 units).
+  costPerUnitCents: numeric("cost_per_unit_cents", { precision: 12, scale: 4 }).notNull(),
+  supplierReference: text("supplier_reference"),
+  notes: text("notes"),
+  status: inventoryBatchStatusEnum("status").notNull().default("active"),
+  isOpeningStock: boolean("is_opening_stock").notNull().default(false),
+  ...timestamps,
 });
 
-export const movementTypeEnum = pgEnum("movement_type", [
-  "purchase",
-  "sale",
-  "string_job",
-  "adjustment",
-  "return",
-  "write_off",
+export const productMovementTypeEnum = pgEnum("product_movement_type", [
+  "received", // stock received (incl. opening stock, flagged via the batch)
+  "sale", // sold through POS
+  "return", // returned by a customer, restocked
+  "return_no_restock", // returned but not fit to resell — refunded, not restocked
+  "manual_add",
+  "manual_deduct",
+  "wastage",
+  "correction", // stocktake correction to an exact remaining quantity
+  "reversal", // reverses an earlier movement (sale cancelled, cost corrected, ...)
 ]);
 
-// Quantity on hand is sum(qty_delta) over these rows, never a stored field.
-export const inventoryMovements = pgTable("inventory_movements", {
+// The append-only ledger — current stock is always sum(quantityChange) over
+// a batch's movements, never a field the app overwrites directly. Same
+// philosophy as string_inventory_movements (brief §6/§52).
+export const productInventoryMovements = pgTable("product_inventory_movements", {
   id: id(),
   productId: uuid("product_id").notNull().references(() => products.id),
-  batchId: uuid("batch_id").references(() => inventoryBatches.id),
+  batchId: uuid("batch_id").notNull().references(() => productInventoryBatches.id),
+  movementType: productMovementTypeEnum("movement_type").notNull(),
+  quantityChange: integer("quantity_change").notNull(),
+  costPerUnitCentsSnapshot: numeric("cost_per_unit_cents_snapshot", { precision: 12, scale: 4 }).notNull(),
+  saleId: uuid("sale_id").references(() => sales.id),
+  saleItemId: uuid("sale_item_id").references(() => saleItems.id),
+  reversesMovementId: uuid("reverses_movement_id"),
+  stockOverride: boolean("stock_override").notNull().default(false),
+  reason: text("reason"),
   occurredAt: timestamp("occurred_at", { withTimezone: true }).defaultNow().notNull(),
-  qtyDelta: numeric("qty_delta", { precision: 10, scale: 2 }).notNull(),
-  unitCostCents: integer("unit_cost_cents").notNull(), // snapshot
-  movementType: movementTypeEnum("movement_type").notNull(),
-  refTable: text("ref_table"),
-  refId: uuid("ref_id"),
-  notes: text("notes"),
 });
 
 // -- work and money -------------------------------------------------
 
 export const paymentMethodEnum = pgEnum("payment_method", ["paynow", "cash", "transfer", "card", "other"]);
-export const paymentStatusEnum = pgEnum("payment_status", ["paid", "unpaid"]);
 
 export const jobStatusEnum = pgEnum("job_status", ["received", "waiting", "in_progress", "completed", "collected", "cancelled"]);
 export const stringSetupTypeEnum = pgEnum("string_setup_type", ["full", "hybrid"]);
 export const tensionUnitEnum = pgEnum("tension_unit", ["kg", "lb"]);
 export const preStretchTypeEnum = pgEnum("pre_stretch_type", ["none", "manual", "machine"]);
-// Distinct from paymentStatusEnum (sales, Phase 6: paid/unpaid only) — a
-// string job also tracks a deposit/partial-payment state day to day, before
-// Phase 6 makes a Sale the actual financial source of truth.
+// A string job also tracks a deposit/partial-payment state day to day. Once
+// a job has a linked Sale (saleId below), this column is frozen at whatever
+// it read at completion time and the UI displays the Sale's own derived
+// payment status instead (brief §56) — Sales are the financial source of
+// truth from Phase 6 on; this stays live only for jobs with no linked Sale.
 export const jobPaymentStatusEnum = pgEnum("job_payment_status", ["unpaid", "partially_paid", "paid"]);
 
 // A physical racket's stringing record. Phase 4.
@@ -293,6 +359,18 @@ export const stringJobs = pgTable("string_jobs", {
   // reversal (e.g. cancelling a completed job), so a later re-completion
   // allocates fresh.
   inventoryProcessedAt: timestamp("inventory_processed_at", { withTimezone: true }),
+  // Phase 6 — set once, the same moment inventoryProcessedAt is (first time
+  // reaching "completed"), never cleared afterwards even if the job is
+  // later reverted/re-completed (mirrors completedAt's "first time only"
+  // semantics). No DB-level FK here deliberately — a stringJobs -> sales
+  // reference plus sales' own stringJobId -> stringJobs reference is a
+  // genuine type-level circular dependency Drizzle/TS can't infer through.
+  // sales.stringJobId (UNIQUE, defined below) is the constrained, enforced
+  // direction — that's what actually makes "one job, at most one Sale"
+  // impossible to violate; this column is just the job's own convenient
+  // pointer to it, kept in sync in the same transaction that sets the
+  // other side. See createJobSale in src/lib/sales.ts.
+  saleId: uuid("sale_id"),
   ...timestamps,
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
@@ -302,14 +380,14 @@ export const stringRoleEnum = pgEnum("string_role", ["main", "cross"]);
 // -- string inventory (Phase 5) -------------------------------------------
 //
 // A dedicated catalogue/ledger for strings, deliberately separate from the
-// `products`/`inventoryBatches`/`inventoryMovements` stub above — those are
-// Phase 1 scaffolding for Phase 6's general retail catalogue (grips, bags,
-// dampeners, ...) and stay untouched and unused until then. The Phase 5
-// brief is explicit that strings need their own structured catalogue
-// (brand/name/gauge/colour/material) distinct from a generic SKU/category
-// product row, so this builds that fresh rather than bending the Phase 6
-// stub to fit both jobs at once. stringJobStrings.stringProductId (below)
-// is the non-destructive link back to a job — same pattern as
+// `products`/`productInventoryBatches`/`productInventoryMovements` general
+// retail catalogue (Phase 6, above) — the Phase 5 brief is explicit that
+// strings need their own structured catalogue (brand/name/gauge/colour/
+// material) distinct from a generic SKU/category product row. A string
+// reel/set that's sold retail is never duplicated into `products`; a Sale
+// Item references stringProductId directly instead (see the Phase 6 sales
+// section below). stringJobStrings.stringProductId (below) is the
+// non-destructive link back to a job — same pattern as
 // customer_rackets.racket_model_id.
 
 export const stringStockUnitEnum = pgEnum("string_stock_unit", ["m", "set"]);
@@ -340,8 +418,6 @@ export const stringProducts = pgTable("string_products", {
   ...timestamps,
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
-
-export const inventoryBatchStatusEnum = pgEnum("inventory_batch_status", ["active", "depleted", "archived"]);
 
 // One purchase/receipt event — the FIFO costing unit (brief §6/§9). unit
 // mirrors the product's trackingUnit at receipt time (a product's tracking
@@ -376,11 +452,12 @@ export const stringInventoryBatches = pgTable("string_inventory_batches", {
 export const stringMovementTypeEnum = pgEnum("string_movement_type", [
   "received", // stock received (incl. opening stock, flagged via the batch)
   "string_job", // consumed by a string job
+  "retail_sale", // Phase 6 — a whole reel/set sold directly through POS, not used in a job (brief §8/§9)
   "manual_add",
   "manual_deduct",
   "wastage",
   "correction", // stocktake correction to an exact remaining quantity
-  "reversal", // reverses an earlier movement (job edit/cancel, or a correction of a mistaken manual entry)
+  "reversal", // reverses an earlier movement (job edit/cancel, a sale cancelled/returned, or a correction of a mistaken manual entry)
 ]);
 
 // The append-only ledger (brief §1/§20) — current stock is always
@@ -397,6 +474,11 @@ export const stringInventoryMovements = pgTable("string_inventory_movements", {
   costPerUnitCentsSnapshot: numeric("cost_per_unit_cents_snapshot", { precision: 12, scale: 4 }).notNull(),
   stringJobId: uuid("string_job_id").references(() => stringJobs.id),
   stringJobRole: stringRoleEnum("string_job_role"),
+  // Phase 6 — set for a retail_sale movement (a whole reel/set sold
+  // through POS) instead of stringJobId/stringJobRole above. Never both:
+  // a movement is either a job's consumption or a retail sale, not both.
+  saleId: uuid("sale_id").references(() => sales.id),
+  saleItemId: uuid("sale_item_id").references(() => saleItems.id),
   // Points at the original movement this row reverses (movementType =
   // 'reversal' only) — lets the ledger show "+10.5m — Reversal of J0042"
   // linked straight back to the "-10.5m — String job J0042" row it undoes.
@@ -406,6 +488,23 @@ export const stringInventoryMovements = pgTable("string_inventory_movements", {
   stockOverride: boolean("stock_override").notNull().default(false),
   reason: text("reason"),
   occurredAt: timestamp("occurred_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Phase 6 — the retail-sale equivalent of string_job_inventory_allocations
+// above, for a whole reel/set sold directly through POS rather than
+// consumed by a job. Same reasoning throughout: one row per FIFO batch
+// touched, reversedAt marks a row undone by a cancelled/returned sale
+// rather than deleting it.
+export const saleItemStringAllocations = pgTable("sale_item_string_allocations", {
+  id: id(),
+  saleItemId: uuid("sale_item_id").notNull().references(() => saleItems.id, { onDelete: "cascade" }),
+  inventoryBatchId: uuid("inventory_batch_id").notNull().references(() => stringInventoryBatches.id),
+  quantityUsed: numeric("quantity_used", { precision: 10, scale: 2 }).notNull(),
+  costPerUnitSnapshot: numeric("cost_per_unit_snapshot", { precision: 12, scale: 4 }).notNull(),
+  cogsAmountCents: integer("cogs_amount_cents").notNull(),
+  movementId: uuid("movement_id").references(() => stringInventoryMovements.id),
+  reversedAt: timestamp("reversed_at", { withTimezone: true }),
+  ...timestamps,
 });
 
 // One row per FIFO batch consumed by one side (main/cross) of one job —
@@ -484,42 +583,123 @@ export const stringJobServices = pgTable("string_job_services", {
   notes: text("notes"),
 });
 
+// -- sales (Phase 6) --------------------------------------------------------
+//
+// The financial source of truth from Phase 6 on (brief §26/§70) — a
+// string job's own finalPriceCents/paymentStatus are the operational quote
+// and day-to-day tracking, never counted as revenue a second time
+// alongside a Sale. See src/lib/sales.ts's file-level comment for the full
+// "how double counting is prevented" writeup.
+
+export const saleStatusEnum = pgEnum("sale_status", ["draft", "completed", "cancelled", "refunded", "partially_refunded"]);
+export const salePaymentStatusEnum = pgEnum("sale_payment_status", ["unpaid", "partially_paid", "paid", "refunded"]);
+export const saleItemTypeEnum = pgEnum("sale_item_type", ["product", "string_product", "string_job_service", "custom"]);
+export const saleDiscountTypeEnum = pgEnum("sale_discount_type", ["fixed", "percent"]);
+
 export const sales = pgTable("sales", {
   id: id(),
-  code: text("code").notNull().unique(), // S-0884
-  occurredAt: timestamp("occurred_at", { withTimezone: true }).defaultNow().notNull(),
+  code: text("code")
+    .notNull()
+    .unique()
+    .default(sql`'S' || lpad(nextval('sale_code_seq')::text, 4, '0')`), // S0001
   customerId: uuid("customer_id").references(() => customers.id), // nullable — walk-in
+  // UNIQUE — a string job can create at most one linked Sale, ever (brief
+  // §25/§27). A second attempt is a database error, not a duplicate revenue
+  // row — the same double-billing guard the old stub put on sale_items,
+  // moved here since a job-linked Sale can hold several sale_items (string
+  // charge, labour, an attached retail product, ...), not just one.
+  stringJobId: uuid("string_job_id").unique().references(() => stringJobs.id),
+  // The one explicit, dedicated revenue date (brief §45) — never inferred
+  // from a customer's/job's/inventory movement's own created_at elsewhere.
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).defaultNow().notNull(),
+  status: saleStatusEnum("status").notNull().default("completed"),
   subtotalCents: integer("subtotal_cents").notNull(),
+  // discountType/discountValue are the edit-facing "how the discount was
+  // entered" (10% vs a flat $5) — discountCents is the resolved amount
+  // actually applied, the snapshot that totalCents is computed from and the
+  // only one anything downstream (reports, the receipt) should ever read.
+  discountType: saleDiscountTypeEnum("discount_type"),
+  discountValue: numeric("discount_value", { precision: 10, scale: 2 }),
   discountCents: integer("discount_cents").notNull().default(0),
   totalCents: integer("total_cents").notNull(),
-  paymentMethod: paymentMethodEnum("payment_method").notNull(),
-  paymentStatus: paymentStatusEnum("payment_status").notNull().default("paid"),
+  // Derived from sale_payments (sum vs totalCents) and kept in sync by
+  // every write to that table — never set directly except by that
+  // recomputation, so it can't drift from what's actually been paid.
+  paymentStatus: salePaymentStatusEnum("payment_status").notNull().default("unpaid"),
   reversesSaleId: uuid("reverses_sale_id"),
+  // Checkout idempotency (brief §51) — the POS generates one id per checkout
+  // attempt and resubmits the same one on a retry; createSale looks this up
+  // first and returns the existing Sale instead of creating a second one on
+  // a double-click, refresh, or network retry.
+  clientRequestId: text("client_request_id").unique(),
   notes: text("notes"),
+  ...timestamps,
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const saleLineTypeEnum = pgEnum("sale_line_type", ["product", "string_job", "service"]);
+// A Sale Item never itself points back at stringJobId — the parent Sale
+// already does that (via sales.stringJobId, which is what's UNIQUE), so a
+// second column here would just be a redundant copy with nothing new to
+// enforce. itemType='string_job_service' plus the parent Sale's stringJobId
+// is enough to tell "this line is part of the job's own charges" apart from
+// "this line is a retail product also bought at the same checkout" (brief
+// §29), without an extra FK that could theoretically disagree with it.
+export const saleItems = pgTable("sale_items", {
+  id: id(),
+  saleId: uuid("sale_id").notNull().references(() => sales.id),
+  itemType: saleItemTypeEnum("item_type").notNull(),
+  productId: uuid("product_id").references(() => products.id),
+  // Set for a retail full-reel/set sale AND for a string_job_service line
+  // that represents the string charge itself (COGS traceability back to
+  // the actual string — brief §28).
+  stringProductId: uuid("string_product_id").references(() => stringProducts.id),
+  descriptionSnapshot: text("description_snapshot").notNull(),
+  skuSnapshot: text("sku_snapshot"),
+  quantity: numeric("quantity", { precision: 10, scale: 2 }).notNull().default("1"),
+  // The catalogue price before any override, vs. what was actually charged
+  // (brief §20) — the product's own default price is never touched by a
+  // one-off override here.
+  standardPriceCentsSnapshot: integer("standard_price_cents_snapshot").notNull(),
+  unitPriceCents: integer("unit_price_cents").notNull(),
+  discountCents: integer("discount_cents").notNull().default(0),
+  lineTotalCents: integer("line_total_cents").notNull(),
+  cogsAmountCents: integer("cogs_amount_cents").notNull().default(0),
+  grossProfitCents: integer("gross_profit_cents").notNull().default(0),
+  // Cumulative quantity returned against this line (brief §34, partial
+  // returns) — the original snapshot fields above are never rewritten;
+  // "net" revenue/COGS for display is derived at read time from this plus
+  // the reversing Sale(s) it produced.
+  returnedQuantity: numeric("returned_quantity", { precision: 10, scale: 2 }).notNull().default("0"),
+  ...timestamps,
+});
 
-export const saleItems = pgTable(
-  "sale_items",
-  {
-    id: id(),
-    saleId: uuid("sale_id").notNull().references(() => sales.id),
-    lineType: saleLineTypeEnum("line_type").notNull(),
-    productId: uuid("product_id").references(() => products.id),
-    // UNIQUE — a string job can be billed exactly once, ever. A second attempt
-    // is a database error, not a duplicate revenue row. This is the constraint
-    // that makes double-billing impossible (see docs/architecture.html, §05).
-    stringJobId: uuid("string_job_id").references(() => stringJobs.id),
-    description: text("description").notNull(), // snapshot
-    qty: numeric("qty", { precision: 10, scale: 2 }).notNull().default("1"),
-    unitPriceCents: integer("unit_price_cents").notNull(), // snapshot
-    lineTotalCents: integer("line_total_cents").notNull(),
-    cogsCents: integer("cogs_cents").notNull().default(0), // snapshot
-    revenueCategory: text("revenue_category").notNull(),
-  },
-  (table) => [unique("sale_items_string_job_id_unique").on(table.stringJobId)],
-);
+// One row per FIFO batch consumed by one retail sale item — the Phase 6
+// equivalent of string_job_inventory_allocations, same reasoning.
+export const saleItemInventoryAllocations = pgTable("sale_item_inventory_allocations", {
+  id: id(),
+  saleItemId: uuid("sale_item_id").notNull().references(() => saleItems.id, { onDelete: "cascade" }),
+  inventoryBatchId: uuid("inventory_batch_id").notNull().references(() => productInventoryBatches.id),
+  quantityUsed: integer("quantity_used").notNull(),
+  costPerUnitSnapshot: numeric("cost_per_unit_snapshot", { precision: 12, scale: 4 }).notNull(),
+  cogsAmountCents: integer("cogs_amount_cents").notNull(),
+  movementId: uuid("movement_id").references(() => productInventoryMovements.id),
+  reversedAt: timestamp("reversed_at", { withTimezone: true }),
+  ...timestamps,
+});
+
+// Split-payment ready (brief §24) — a Sale's paymentStatus is always
+// derived from summing these against totalCents, never set by hand. Kept
+// simple on the POS UI (one payment at checkout); the Sale detail page can
+// record more later (e.g. "$20 PayNow now, $15 Cash at collection").
+export const salePayments = pgTable("sale_payments", {
+  id: id(),
+  saleId: uuid("sale_id").notNull().references(() => sales.id),
+  amountCents: integer("amount_cents").notNull(),
+  paymentMethod: paymentMethodEnum("payment_method").notNull(),
+  paymentDate: timestamp("payment_date", { withTimezone: true }).defaultNow().notNull(),
+  notes: text("notes"),
+  ...timestamps,
+});
 
 export const expenseCategories = pgTable("expense_categories", {
   id: id(),

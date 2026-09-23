@@ -10,8 +10,10 @@ import { Icon } from "@/components/ds/icon";
 import { racketLabel } from "@/lib/racket-label";
 import type { RacketWithSpecs } from "@/lib/rackets";
 import type { JobHistoryRow } from "@/lib/jobs";
+import type { CustomerPurchaseRow } from "@/lib/sales";
 import { formatCents, formatDate } from "@/lib/format";
 import { JOB_STATUS_LABEL, JOB_STATUS_TONE, PAYMENT_STATUS_LABEL, PAYMENT_STATUS_TONE } from "@/components/jobs/job-status";
+import { SALE_PAYMENT_STATUS_LABEL, SALE_PAYMENT_STATUS_TONE, SALE_STATUS_LABEL, SALE_STATUS_TONE } from "@/components/sales/sale-status";
 
 const TABS = [
   { value: "rackets", label: "Rackets" },
@@ -19,20 +21,7 @@ const TABS = [
   { value: "purchases", label: "Purchase history" },
 ];
 
-function NotBuiltYet({ phase, action, actionHref }: { phase: number; action: string; actionHref: string }) {
-  return (
-    <div className="rec-empty" style={{ display: "flex", flexDirection: "column", gap: 12, alignItems: "center" }}>
-      <span>Not tracked yet — Phase {phase} adds this.</span>
-      <Link href={actionHref}>
-        <Button size="sm" variant="secondary">
-          {action}
-        </Button>
-      </Link>
-    </div>
-  );
-}
-
-export function CustomerProfileTabs({ customerId, rackets: allRackets, jobs }: { customerId: string; rackets: RacketWithSpecs[]; jobs: JobHistoryRow[] }) {
+export function CustomerProfileTabs({ customerId, rackets: allRackets, jobs, sales }: { customerId: string; rackets: RacketWithSpecs[]; jobs: JobHistoryRow[]; sales: CustomerPurchaseRow[] }) {
   const [tab, setTab] = useState("rackets");
   const [showArchived, setShowArchived] = useState(false);
 
@@ -126,8 +115,37 @@ export function CustomerProfileTabs({ customerId, rackets: allRackets, jobs }: {
               ))}
             </div>
           )
+        ) : sales.length === 0 ? (
+          <div className="rec-empty" style={{ display: "flex", flexDirection: "column", gap: 12, alignItems: "center" }}>
+            <span>No purchases on file yet.</span>
+            <Link href={`/pos?customerId=${customerId}`}>
+              <Button size="sm" variant="secondary" iconLeft="plus">
+                New sale
+              </Button>
+            </Link>
+          </div>
         ) : (
-          <NotBuiltYet phase={6} action="New sale" actionHref="/pos" />
+          <div className="rows">
+            {sales.map((s) => (
+              <Link key={s.id} href={`/sales/${s.id}`} className="row">
+                <div className="row-main">
+                  <div className="row-t">{s.itemSummary || s.code}</div>
+                  <div className="row-s num">
+                    {s.code} · {formatDate(s.occurredAt)}
+                  </div>
+                </div>
+                <div className="row-end">
+                  <span className="row-s num">{formatCents(s.totalCents)}</span>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <Badge tone={SALE_PAYMENT_STATUS_TONE[s.paymentStatus]}>{SALE_PAYMENT_STATUS_LABEL[s.paymentStatus]}</Badge>
+                    <Badge tone={SALE_STATUS_TONE[s.status]} dot>
+                      {SALE_STATUS_LABEL[s.status]}
+                    </Badge>
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
         )}
       </div>
     </Card>

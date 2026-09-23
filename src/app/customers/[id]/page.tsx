@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getCustomer, getCustomerStats } from "@/lib/customers";
 import { listRacketsForCustomer } from "@/lib/rackets";
 import { listJobsForCustomer } from "@/lib/jobs";
+import { listSalesForCustomer } from "@/lib/sales";
 import { Card } from "@/components/ds/card";
 import { Button } from "@/components/ds/button";
 import { IconButton } from "@/components/ds/icon-button";
@@ -17,7 +18,7 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
   const customer = await getCustomer(id);
   if (!customer) notFound();
 
-  const [stats, rackets, jobs] = await Promise.all([getCustomerStats(id), listRacketsForCustomer(id, true), listJobsForCustomer(id)]);
+  const [stats, rackets, jobs, sales] = await Promise.all([getCustomerStats(id), listRacketsForCustomer(id, true), listJobsForCustomer(id), listSalesForCustomer(id)]);
 
   const items: SpecListItem[] = [
     { label: "Phone", value: customer.phone },
@@ -66,7 +67,7 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
           <SpecList dense items={items} />
         </Card>
 
-        <CustomerProfileTabs customerId={customer.id} rackets={rackets} jobs={jobs} />
+        <CustomerProfileTabs customerId={customer.id} rackets={rackets} jobs={jobs} sales={sales} />
       </div>
     </div>
   );

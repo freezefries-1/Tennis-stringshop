@@ -20,6 +20,8 @@ import { createRacket, getRacket, listRacketsForCustomer, type RacketInput } fro
 import { findCustomerByPhone, createCustomer } from "@/lib/customers";
 import { createStringProduct, searchStringProductsForPicker, type StringProductInput } from "@/lib/string-inventory";
 import { getSuggestedStringUsage } from "@/lib/string-usage";
+import { addProductToJobSale, recordSalePayment, type PaymentMethod } from "@/lib/sales";
+import { searchProductsForPicker } from "@/lib/products";
 import type { JobFormState, JobFormValues } from "@/lib/job-form-types";
 
 function readStringLine(formData: FormData, prefix: "main" | "cross") {
@@ -192,6 +194,9 @@ export async function updateJobAction(jobId: string, prevState: JobFormState, fo
     if (result.reason === "insufficient_stock") {
       return { status: "insufficient_stock", message: "Not enough stock for the updated string usage.", shortages: result.shortages, values };
     }
+    if (result.reason === "sale_locked") {
+      return { status: "error", message: `This job's linked sale (${result.saleCode}) already has a payment recorded, so its price/services can't be silently changed. Use the sale's own return/refund workflow for a correction.`, values };
+    }
     return { status: "error", message: "This job no longer exists.", values };
   }
   revalidatePath("/jobs");
@@ -208,6 +213,10 @@ export async function changeJobStatusAction(jobId: string, status: JobStatus, al
   if (result.ok) {
     revalidatePath(`/customers/${result.job.customerId}`);
     revalidatePath(`/customers/${result.job.customerId}/rackets/${result.job.customerRacketId}`);
+    if (result.job.saleId) {
+      revalidatePath("/sales");
+      revalidatePath(`/sales/${result.job.saleId}`);
+    }
   }
   return result;
 }
@@ -234,6 +243,33 @@ export async function deleteJobAction(jobId: string): Promise<DeleteJobResult> {
   }
   revalidatePath("/jobs");
   return { status: "deleted" };
+}
+
+// -- Phase 6: linked Sale actions ---------------------------------------
+
+/** "Take payment" on a job with a linked Sale (brief §55) — records a
+ * sale_payments row and lets the Sale derive its own paymentStatus from it.
+ * Never touches stringJobs.paymentStatus (see changePaymentStatus's own
+ * comment) — this is the only payment path once a Sale exists. */
+export async function recordJobSalePaymentAction(saleId: string, jobId: string, amountCents: number, paymentMethod: PaymentMethod) {
+  await recordSalePayment({ saleId, amountCents, paymentMethod });
+  revalidatePath("/jobs");
+  revalidatePath(`/jobs/${jobId}`);
+  revalidatePath(`/sales/${saleId}`);
+}
+
+/** "Add product" on a job's linked Sale (brief §29) — a small retail item
+ * bought at the same visit (an overgrip, a dampener) flows into the SAME
+ * Sale instead of needing a second POS checkout. */
+export async function addProductToJobSaleAction(saleId: string, jobId: string, productId: string, quantity: number) {
+  const result = await addProductToJobSale(saleId, productId, quantity);
+  revalidatePath(`/jobs/${jobId}`);
+  revalidatePath(`/sales/${saleId}`);
+  return result;
+}
+
+export async function fetchProductsForJobPicker(query: string) {
+  return searchProductsForPicker(query);
 }
 
 // -- picker RPCs (src/components/jobs/*) -------------------------------

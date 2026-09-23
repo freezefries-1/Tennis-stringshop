@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import {
+  saleItemStringAllocations,
   stringInventoryBatches,
   stringInventoryMovements,
   stringJobInventoryAllocations,
@@ -15,6 +16,7 @@ export type StringProduct = typeof stringProducts.$inferSelect;
 export type StringInventoryBatch = typeof stringInventoryBatches.$inferSelect;
 export type StringInventoryMovement = typeof stringInventoryMovements.$inferSelect;
 export type StringJobInventoryAllocation = typeof stringJobInventoryAllocations.$inferSelect;
+export type SaleItemStringAllocation = typeof saleItemStringAllocations.$inferSelect;
 export type Supplier = typeof suppliers.$inferSelect;
 export type StockUnit = (typeof stringStockUnitEnum.enumValues)[number];
 export type MovementType = StringInventoryMovement["movementType"];
@@ -739,6 +741,166 @@ export async function hasActiveAllocations(stringJobId: string, role: "main" | "
 
 export async function listAllocationsForJob(stringJobId: string): Promise<StringJobInventoryAllocation[]> {
   return db.select().from(stringJobInventoryAllocations).where(eq(stringJobInventoryAllocations.stringJobId, stringJobId));
+}
+
+// -- FIFO allocation for retail sales (Phase 6) ------------------------------
+//
+// A whole reel/set of a string sold directly through POS, not consumed by a
+// job (brief §8/§9) — same FIFO walk as allocateForRole above, but against
+// sale_item_string_allocations instead of string_job_inventory_allocations
+// (which requires a stringJobId), and movementType "retail_sale" instead of
+// "string_job". Deliberately a separate function rather than overloading
+// allocateForRole with an optional job/sale union — keeps each call site
+// unambiguous about which kind of consumption it's recording, and avoids
+// touching the job-completion path at all (brief §59: no risky Phase 5
+// rewrite for this).
+
+export interface AllocateStringForSaleParams {
+  tx: DbOrTx;
+  stringProductId: string;
+  saleId: string;
+  saleItemId: string;
+  quantityNeeded: number;
+  unit: StockUnit;
+  allowOverride: boolean;
+}
+
+export interface AllocateStringForSaleResult {
+  allocations: SaleItemStringAllocation[];
+  cogsCents: number;
+}
+
+export async function allocateStringForSale(params: AllocateStringForSaleParams): Promise<AllocateStringForSaleResult> {
+  const { tx, stringProductId, saleId, saleItemId, quantityNeeded, unit, allowOverride } = params;
+  const { sufficient, plan } = await planFifo(tx, stringProductId, quantityNeeded);
+
+  let overrideLine: AllocationLine | null = null;
+  if (!sufficient) {
+    if (!allowOverride) throw new InsufficientStockError(plan.reduce((s, l) => s + l.quantity, 0), quantityNeeded);
+    const covered = plan.reduce((s, l) => s + l.quantity, 0);
+    const shortfall = quantityNeeded - covered;
+    const [mostRecent] = await tx.select().from(stringInventoryBatches).where(eq(stringInventoryBatches.stringProductId, stringProductId)).orderBy(desc(stringInventoryBatches.createdAt)).limit(1);
+    if (!mostRecent) throw new Error("No batches exist for this string yet — receive stock before overriding.");
+    const costPerUnitCents = Number(mostRecent.costPerUnitCents);
+    overrideLine = { batchId: mostRecent.id, batchNumber: mostRecent.batchNumber, quantity: shortfall, costPerUnitCents, cogsCents: Math.round(shortfall * costPerUnitCents) };
+  }
+
+  const lines = overrideLine ? mergeOverrideLine(plan, overrideLine) : plan;
+  const overrideBatchId = overrideLine?.batchId ?? null;
+  const allocations: SaleItemStringAllocation[] = [];
+  let cogsCents = 0;
+
+  for (const line of lines) {
+    const isOverride = line.batchId === overrideBatchId;
+    const [batch] = await tx.select().from(stringInventoryBatches).where(eq(stringInventoryBatches.id, line.batchId)).for("update");
+    const newRemaining = Number(batch.remainingQuantity) - line.quantity;
+
+    await tx
+      .update(stringInventoryBatches)
+      .set({ remainingQuantity: newRemaining.toFixed(2), status: newRemaining > 0 ? "active" : "depleted" })
+      .where(eq(stringInventoryBatches.id, batch.id));
+
+    const [movement] = await tx
+      .insert(stringInventoryMovements)
+      .values({
+        stringProductId,
+        batchId: batch.id,
+        movementType: "retail_sale",
+        quantityChange: (-line.quantity).toFixed(2),
+        unit,
+        costPerUnitCentsSnapshot: batch.costPerUnitCents,
+        saleId,
+        saleItemId,
+        stockOverride: isOverride,
+      })
+      .returning();
+
+    const roundedCogs = Math.round(line.quantity * line.costPerUnitCents);
+    cogsCents += roundedCogs;
+
+    const [allocation] = await tx
+      .insert(saleItemStringAllocations)
+      .values({
+        saleItemId,
+        inventoryBatchId: batch.id,
+        quantityUsed: line.quantity.toFixed(2),
+        costPerUnitSnapshot: batch.costPerUnitCents,
+        cogsAmountCents: roundedCogs,
+        movementId: movement.id,
+      })
+      .returning();
+    allocations.push(allocation);
+  }
+
+  return { allocations, cogsCents };
+}
+
+/** Reverses (up to) quantityToReverse worth of a retail string sale item's
+ * allocations, newest-batch-first is irrelevant here (order doesn't matter
+ * for a reversal the way it does for consumption) — walks whatever's
+ * active, splitting an allocation when only part of it is being returned,
+ * same partial-return handling as products.ts's
+ * reverseAllocationsForSaleItem. restock=false (a damaged, non-resellable
+ * return) records the reversal for COGS/revenue purposes without crediting
+ * the batch's remainingQuantity back. */
+export async function reverseStringSaleItem(tx: DbOrTx, saleItemId: string, quantityToReverse: number, reason: string, restock: boolean): Promise<number> {
+  const active = await tx
+    .select()
+    .from(saleItemStringAllocations)
+    .where(and(eq(saleItemStringAllocations.saleItemId, saleItemId), isNull(saleItemStringAllocations.reversedAt)))
+    .orderBy(desc(saleItemStringAllocations.createdAt));
+
+  let remaining = quantityToReverse;
+  let cogsReversedCents = 0;
+
+  for (const alloc of active) {
+    if (remaining <= 0.0001) break;
+    const allocQty = Number(alloc.quantityUsed);
+    const take = Math.min(allocQty, remaining);
+    if (take <= 0) continue;
+
+    const [batch] = await tx.select().from(stringInventoryBatches).where(eq(stringInventoryBatches.id, alloc.inventoryBatchId)).for("update");
+    if (!batch) continue;
+
+    if (restock) {
+      const newRemaining = Number(batch.remainingQuantity) + take;
+      await tx.update(stringInventoryBatches).set({ remainingQuantity: newRemaining.toFixed(2), status: "active" }).where(eq(stringInventoryBatches.id, batch.id));
+    }
+
+    await tx.insert(stringInventoryMovements).values({
+      stringProductId: batch.stringProductId,
+      batchId: batch.id,
+      movementType: "reversal",
+      quantityChange: restock ? take.toFixed(2) : "0.00",
+      unit: batch.unit,
+      costPerUnitCentsSnapshot: alloc.costPerUnitSnapshot,
+      saleItemId,
+      reversesMovementId: alloc.movementId,
+      reason,
+    });
+
+    const takenCogsCents = Math.round(take * Number(alloc.costPerUnitSnapshot));
+    cogsReversedCents += takenCogsCents;
+
+    if (take >= allocQty - 0.0001) {
+      await tx.update(saleItemStringAllocations).set({ reversedAt: new Date() }).where(eq(saleItemStringAllocations.id, alloc.id));
+    } else {
+      await tx.update(saleItemStringAllocations).set({ quantityUsed: (allocQty - take).toFixed(2) }).where(eq(saleItemStringAllocations.id, alloc.id));
+      await tx.insert(saleItemStringAllocations).values({
+        saleItemId,
+        inventoryBatchId: alloc.inventoryBatchId,
+        quantityUsed: take.toFixed(2),
+        costPerUnitSnapshot: alloc.costPerUnitSnapshot,
+        cogsAmountCents: takenCogsCents,
+        movementId: alloc.movementId,
+        reversedAt: new Date(),
+      });
+    }
+
+    remaining -= take;
+  }
+
+  return cogsReversedCents;
 }
 
 // -- CSV export --------------------------------------------------------

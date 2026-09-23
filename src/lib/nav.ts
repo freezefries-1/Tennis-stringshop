@@ -17,6 +17,7 @@ export const NAV: NavItem[] = [
   // not a static seed-data number the way inventory's still does.
   { value: "jobs", label: "String jobs", icon: "wrench" },
   { value: "pos", label: "POS", icon: "scan-line" },
+  { value: "sales", label: "Sales", icon: "banknote" },
   { section: "People" },
   { value: "customers", label: "Customers", icon: "users" },
   { value: "rackets", label: "Rackets", icon: "circle-dot" },
@@ -57,15 +58,13 @@ export const PAGES: Record<string, PageMeta> = {
   pos: {
     title: "POS",
     label: "Bench",
+    action: null,
+  },
+  sales: {
+    title: "Sales",
+    label: "Bench",
     action: "New sale",
-    phase: 6,
-    builds: [
-      "Customer-optional cart, multiple items, quantities",
-      "Completed string jobs appear as pending lines",
-      "Sale-level discount, PayNow / cash / transfer / card",
-      "Stock deducted per line from its batch",
-      "Reversing sales for returns — records are never edited",
-    ],
+    actionHref: "/pos",
   },
   customers: {
     title: "Customers",
@@ -94,14 +93,8 @@ export const PAGES: Record<string, PageMeta> = {
   products: {
     title: "Products",
     label: "Stock",
-    action: "New product",
-    phase: 6,
-    builds: [
-      "SKU, brand, category, variant, supplier",
-      "Cost and selling price, reorder level, archive",
-      "String products carry gauge, colour, material and reel length",
-      "One catalogue — strings and hard goods are not separate systems",
-    ],
+    action: "Add product",
+    actionHref: "/products/new",
   },
   catalogue: {
     title: "Racket database",

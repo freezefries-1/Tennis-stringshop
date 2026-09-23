@@ -1,8 +1,10 @@
 import type { Config } from "drizzle-kit";
 
-// Not wired to a live database yet (see src/db/schema.ts). Once a Supabase
-// Postgres connection string exists, set DATABASE_URL and `npm run db:push`
-// (or `db:generate` + a migration run) creates the schema for real.
+// Live against Supabase Postgres via DATABASE_URL. `npm run db:generate`
+// produces a migration file (applied by hand via the Supabase SQL editor —
+// see AGENTS.md); `npm run db:push` diffs and applies directly, but only
+// works from an environment that can actually reach Supabase's Postgres
+// port.
 export default {
   schema: "./src/db/schema.ts",
   out: "./drizzle",

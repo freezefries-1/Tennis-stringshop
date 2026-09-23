@@ -27,6 +27,8 @@ import {
   Phone,
   Trash2,
   Home,
+  Archive,
+  RotateCcw,
   type LucideIcon,
 } from "lucide-react";
 
@@ -59,6 +61,8 @@ const ICONS: Record<string, LucideIcon> = {
   "arrow-right": ArrowRight,
   trash: Trash2,
   home: Home,
+  archive: Archive,
+  "rotate-ccw": RotateCcw,
 };
 
 export interface IconProps {

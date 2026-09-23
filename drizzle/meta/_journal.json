@@ -57,6 +57,27 @@
       "when": 1790127478515,
       "tag": "0007_string_length_suggestions",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790134523388,
+      "tag": "0008_phase6_drop_stub_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790134571010,
+      "tag": "0009_phase6_products_sales",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790134846489,
+      "tag": "0010_phase6_string_retail_sale",
+      "breakpoints": true
     }
   ]
 }

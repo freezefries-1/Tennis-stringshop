@@ -9,6 +9,7 @@ import { SpecList, type SpecListItem } from "@/components/ds/spec-list";
 import { formatCents, formatDate } from "@/lib/format";
 import { ChangeStatusControl } from "@/components/jobs/change-status-control";
 import { ChangePaymentStatusControl } from "@/components/jobs/change-payment-status-control";
+import { LinkedSalePanel } from "@/components/jobs/linked-sale-panel";
 import { CancelJobButton } from "@/components/jobs/cancel-job-button";
 import { DeleteJobButton } from "@/components/jobs/delete-job-button";
 import { JOB_STATUS_LABEL, JOB_STATUS_TONE } from "@/components/jobs/job-status";
@@ -78,9 +79,11 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
     { label: "Pre-stretch", value: job.preStretchType === "none" ? "None" : `${job.preStretchType === "manual" ? "Manual" : "Machine"}${job.preStretchPct ? ` · ${job.preStretchPct}%` : ""}` },
   );
 
-  const paymentItems: SpecListItem[] = [
-    { label: "Payment method", value: job.paymentMethod ? job.paymentMethod.charAt(0).toUpperCase() + job.paymentMethod.slice(1) : "—" },
-  ];
+  const paymentItems: SpecListItem[] = job.linkedSale
+    ? job.linkedSale.payments.length
+      ? job.linkedSale.payments.map((p) => ({ label: p.paymentMethod.charAt(0).toUpperCase() + p.paymentMethod.slice(1), value: <span className="num">{formatCents(p.amountCents)}</span> }))
+      : [{ label: "Payment method", value: "No payments recorded yet" }]
+    : [{ label: "Payment method", value: job.paymentMethod ? job.paymentMethod.charAt(0).toUpperCase() + job.paymentMethod.slice(1) : "—" }];
 
   return (
     <div className="ph-wrap" style={{ maxWidth: 960 }}>
@@ -128,9 +131,9 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
         </div>
         <div>
           <div className="lab" style={{ marginBottom: 6 }}>
-            Payment status
+            {job.linkedSale ? "Sale" : "Payment status"}
           </div>
-          <ChangePaymentStatusControl jobId={job.id} paymentStatus={job.paymentStatus} />
+          {job.linkedSale ? <LinkedSalePanel jobId={job.id} sale={job.linkedSale} /> : <ChangePaymentStatusControl jobId={job.id} paymentStatus={job.paymentStatus} />}
         </div>
       </div>
 

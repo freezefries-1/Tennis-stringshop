@@ -9,8 +9,9 @@ import { ProgressBar } from "@/components/ds/progress-bar";
 import { SpecList, type SpecListItem } from "@/components/ds/spec-list";
 import { StatBlock } from "@/components/ds/stat-block";
 import { DATA } from "@/lib/data";
-import { formatMoney, formatMoney0, formatDate } from "@/lib/format";
-import type { LowStockRow, RecentMovementRow } from "@/lib/string-inventory";
+import { formatMoney, formatMoney0, formatCents, formatDate } from "@/lib/format";
+import type { RecentMovementRow } from "@/lib/string-inventory";
+import type { DashboardSalesStats, RecentSaleRow } from "@/lib/sales";
 
 function PanelHead({ label, title, action }: { label: string; title?: string; action?: ReactNode }) {
   return (
@@ -184,7 +185,21 @@ function ReadyList() {
   );
 }
 
-function LowStock({ items }: { items: LowStockRow[] }) {
+export interface MergedLowStockRow {
+  kind: "string" | "product";
+  productId: string;
+  label: string;
+  available: string;
+  unit: string;
+  threshold: string;
+  status: string;
+}
+
+function unitSuffix(unit: string): string {
+  return unit === "set" ? " sets" : unit === "m" ? "m" : "";
+}
+
+function LowStock({ items }: { items: MergedLowStockRow[] }) {
   const router = useRouter();
   return (
     <Card padding="20px 0 8px">
@@ -207,15 +222,20 @@ function LowStock({ items }: { items: LowStockRow[] }) {
           {items.map((s) => {
             const available = Number(s.available);
             const threshold = Number(s.threshold) || 1;
+            const href = s.kind === "string" ? `/inventory/products/${s.productId}` : `/products/${s.productId}`;
             return (
-              <div className="row" key={s.productId} onClick={() => router.push(`/inventory/products/${s.productId}`)} style={{ cursor: "pointer" }}>
+              <div className="row" key={`${s.kind}-${s.productId}`} onClick={() => router.push(href)} style={{ cursor: "pointer" }}>
                 <div className="row-main">
                   <div className="row-t">{s.label}</div>
-                  <div className="row-s num">reorder at {s.threshold} {s.unit === "set" ? "sets" : "m"}</div>
+                  <div className="row-s num">
+                    reorder at {s.threshold}
+                    {unitSuffix(s.unit)}
+                  </div>
                 </div>
                 <div className="row-end" style={{ minWidth: 104 }}>
                   <span className="num" style={{ color: s.status === "out_of_stock" ? "var(--signal-danger)" : "var(--signal-warning)", fontSize: 14 }}>
-                    {s.available} {s.unit === "set" ? "sets" : "m"}
+                    {s.available}
+                    {unitSuffix(s.unit)}
                   </span>
                   <ProgressBar value={available} max={threshold} height={4} tone={s.status === "out_of_stock" ? "danger" : "warning"} style={{ width: 96 }} />
                 </div>
@@ -319,7 +339,7 @@ function RecentJobs() {
   );
 }
 
-function RecentSales() {
+function RecentSales({ sales }: { sales: RecentSaleRow[] }) {
   const router = useRouter();
   return (
     <Card padding="20px 0 8px">
@@ -327,37 +347,51 @@ function RecentSales() {
         <PanelHead
           label="Recent sales"
           action={
-            <Button size="sm" variant="ghost" iconRight="arrow-right" onClick={() => router.push("/pos")}>
-              Open POS
+            <Button size="sm" variant="ghost" iconRight="arrow-right" onClick={() => router.push("/sales")}>
+              All sales
             </Button>
           }
         />
       </div>
-      <div className="rows">
-        {DATA.sales.map((s) => (
-          <div className="row" key={s.id}>
-            <div className="row-main">
-              <div className="row-t">{s.customer}</div>
-              <div className="row-s num">
-                {s.id} · {s.items}
+      {sales.length === 0 ? (
+        <div style={{ padding: "0 24px 16px" }} className="row-s">
+          No sales yet — ring up the first one from POS.
+        </div>
+      ) : (
+        <div className="rows">
+          {sales.map((s) => (
+            <div className="row" key={s.id} onClick={() => router.push(`/sales/${s.id}`)} style={{ cursor: "pointer" }}>
+              <div className="row-main">
+                <div className="row-t">{s.customerName ?? "Walk-in"}</div>
+                <div className="row-s num">
+                  {s.code} · {s.itemSummary || "—"}
+                </div>
+              </div>
+              <div className="row-end">
+                <span className="row-s num">{formatDate(s.occurredAt)}</span>
+                <span className="num" style={{ fontSize: 14.5, fontWeight: 500 }}>
+                  {formatCents(s.totalCents)}
+                </span>
               </div>
             </div>
-            <div className="row-end">
-              <span className="row-s num">
-                {s.method} · {s.when}
-              </span>
-              <span className="num" style={{ fontSize: 14.5, fontWeight: 500 }}>
-                {formatMoney(s.total)}
-              </span>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </Card>
   );
 }
 
-export function Dashboard({ lowStock, recentMovements }: { lowStock: LowStockRow[]; recentMovements: RecentMovementRow[] }) {
+export function Dashboard({
+  lowStock,
+  recentMovements,
+  salesStats,
+  recentSales,
+}: {
+  lowStock: MergedLowStockRow[];
+  recentMovements: RecentMovementRow[];
+  salesStats: DashboardSalesStats;
+  recentSales: RecentSaleRow[];
+}) {
   const t = DATA.today;
   return (
     <div className="dash">
@@ -367,13 +401,19 @@ export function Dashboard({ lowStock, recentMovements }: { lowStock: LowStockRow
       </div>
       <div className="g4">
         <Card>
-          <StatBlock label="Revenue" value={formatMoney0(t.revenue)} icon="banknote" />
+          <StatBlock label="Sales revenue" value={formatMoney0(salesStats.todayRevenueCents / 100)} icon="banknote" />
+          <div className="row-s num" style={{ marginTop: 12 }}>
+            This month {formatMoney0(salesStats.monthRevenueCents / 100)} · gross profit {formatMoney0(salesStats.monthGrossProfitCents / 100)}
+          </div>
         </Card>
         <Card>
           <StatBlock label="String jobs" value={t.jobs} unit="done" icon="wrench" />
         </Card>
         <Card>
-          <StatBlock label="Products sold" value={t.products} unit="items" icon="package" />
+          <StatBlock label="Unpaid sales" value={salesStats.unpaidSalesCount} unit="sales" icon="banknote" />
+          <div className="row-s num" style={{ marginTop: 12 }}>
+            {formatMoney0(salesStats.unpaidSalesCents / 100)} outstanding
+          </div>
         </Card>
         <Card>
           <ProgressBar label="Bench load" value={t.benchLoad} max={t.benchCapacity} valueLabel={`${t.benchLoad} / ${t.benchCapacity}`} />
@@ -439,7 +479,7 @@ export function Dashboard({ lowStock, recentMovements }: { lowStock: LowStockRow
       </div>
       <div className="g2">
         <RecentJobs />
-        <RecentSales />
+        <RecentSales sales={recentSales} />
       </div>
       <div className="g1">
         <RecentInventoryMovements movements={recentMovements} />

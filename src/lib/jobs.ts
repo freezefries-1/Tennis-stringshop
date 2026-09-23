@@ -5,6 +5,7 @@ import { getRacket, type RacketWithSpecs } from "./rackets";
 import { racketLabel } from "./racket-label";
 import { allocateForRole, InsufficientStockError, previewStock, reverseAllocationsForRole, type StockUnit } from "./string-inventory";
 import { isForeignKeyViolation } from "./db-errors";
+import { createJobSale, getSale, resyncJobSale, SaleLockedError, type SaleDetail } from "./sales";
 
 export type StringJob = typeof stringJobs.$inferSelect;
 export type StringJobString = typeof stringJobStrings.$inferSelect;
@@ -165,7 +166,11 @@ function needsAllocation(line: StringSetupInput): line is StringSetupInput & { s
   return !line.customerSupplied && !!line.stringProductId && !!line.quantityUsed && Number(line.quantityUsed) > 0;
 }
 
-export type UpdateJobResult = { ok: true; job: StringJob } | { ok: false; reason: "not_found" } | { ok: false; reason: "insufficient_stock"; shortages: StockShortage[] };
+export type UpdateJobResult =
+  | { ok: true; job: StringJob }
+  | { ok: false; reason: "not_found" }
+  | { ok: false; reason: "insufficient_stock"; shortages: StockShortage[] }
+  | { ok: false; reason: "sale_locked"; saleCode: string };
 
 /** Full replace of strings/services on edit — simpler than diffing two or
  * three rows, and Phase 4's brief calls editing "relatively straightforward"
@@ -211,56 +216,73 @@ export async function updateJob(id: string, input: JobInput, opts?: { allowStock
 
   const finalPriceCents = computeFinalPriceCents(input.services, input.discountCents);
 
-  const job = await db.transaction(async (tx) => {
-    for (const line of changedRoles) {
-      await reverseAllocationsForRole(tx, id, line.role, "String usage edited");
-    }
+  try {
+    const job = await db.transaction(async (tx) => {
+      for (const line of changedRoles) {
+        await reverseAllocationsForRole(tx, id, line.role, "String usage edited");
+      }
 
-    const [row] = await tx
-      .update(stringJobs)
-      .set({
-        setupType: input.setupType,
-        receivedOn: input.receivedOn,
-        dueOn: input.dueOn || null,
-        numberOfKnots: input.numberOfKnots ?? null,
-        preStretchType: input.preStretchType,
-        preStretchPct: input.preStretchType === "machine" ? input.preStretchPct || null : null,
-        paymentStatus: input.paymentStatus,
-        paymentMethod: input.paymentMethod || null,
-        discountCents: input.discountCents,
-        finalPriceCents,
-        generalNotes: input.generalNotes?.trim() || null,
-        stringingNotes: input.stringingNotes?.trim() || null,
-        updatedAt: new Date(),
-      })
-      .where(eq(stringJobs.id, id))
-      .returning();
+      const [row] = await tx
+        .update(stringJobs)
+        .set({
+          setupType: input.setupType,
+          receivedOn: input.receivedOn,
+          dueOn: input.dueOn || null,
+          numberOfKnots: input.numberOfKnots ?? null,
+          preStretchType: input.preStretchType,
+          preStretchPct: input.preStretchType === "machine" ? input.preStretchPct || null : null,
+          paymentStatus: input.paymentStatus,
+          paymentMethod: input.paymentMethod || null,
+          discountCents: input.discountCents,
+          finalPriceCents,
+          generalNotes: input.generalNotes?.trim() || null,
+          stringingNotes: input.stringingNotes?.trim() || null,
+          updatedAt: new Date(),
+        })
+        .where(eq(stringJobs.id, id))
+        .returning();
 
-    await tx.delete(stringJobStrings).where(eq(stringJobStrings.stringJobId, id));
-    await tx.insert(stringJobStrings).values(stringValues(id, input.strings));
+      await tx.delete(stringJobStrings).where(eq(stringJobStrings.stringJobId, id));
+      await tx.insert(stringJobStrings).values(stringValues(id, input.strings));
 
-    await tx.delete(stringJobServices).where(eq(stringJobServices.stringJobId, id));
-    if (input.services.length) {
-      await tx.insert(stringJobServices).values(serviceValues(id, input.services));
-    }
+      await tx.delete(stringJobServices).where(eq(stringJobServices.stringJobId, id));
+      if (input.services.length) {
+        await tx.insert(stringJobServices).values(serviceValues(id, input.services));
+      }
 
-    for (const line of changedRoles) {
-      if (!needsAllocation(line)) continue;
-      await allocateForRole({
-        tx,
-        stringJobId: id,
-        role: line.role,
-        stringProductId: line.stringProductId,
-        quantityNeeded: Number(line.quantityUsed),
-        unit: line.usageUnit ?? "m",
-        allowOverride: !!opts?.allowStockOverride,
-      });
-    }
+      for (const line of changedRoles) {
+        if (!needsAllocation(line)) continue;
+        await allocateForRole({
+          tx,
+          stringJobId: id,
+          role: line.role,
+          stringProductId: line.stringProductId,
+          quantityNeeded: Number(line.quantityUsed),
+          unit: line.usageUnit ?? "m",
+          allowOverride: !!opts?.allowStockOverride,
+        });
+      }
 
-    return row;
-  });
+      // Phase 6 — a job that already has a linked Sale gets it resynced to
+      // the just-saved services/discount and the CURRENT string COGS (read
+      // fresh from string_job_inventory_allocations, which the reversals/
+      // reallocations above have already brought up to date either way) in
+      // the SAME transaction as the job edit itself: either both land or
+      // neither does.
+      if (row.saleId) {
+        const currentAllocations = await tx.select().from(stringJobInventoryAllocations).where(and(eq(stringJobInventoryAllocations.stringJobId, id), isNull(stringJobInventoryAllocations.reversedAt)));
+        const stringCogsCents = currentAllocations.reduce((sum, a) => sum + a.cogsAmountCents, 0);
+        await resyncJobSale(tx, row.saleId, serviceValues(id, input.services), input.discountCents, stringCogsCents);
+      }
 
-  return { ok: true, job };
+      return row;
+    });
+
+    return { ok: true, job };
+  } catch (err) {
+    if (err instanceof SaleLockedError) return { ok: false, reason: "sale_locked", saleCode: err.saleCode };
+    throw err;
+  }
 }
 
 export type ChangeJobStatusResult = { ok: true; job: StringJob } | { ok: false; reason: "not_found" } | { ok: false; reason: "insufficient_stock"; shortages: StockShortage[] };
@@ -297,7 +319,7 @@ export async function changeJobStatus(id: string, status: JobStatus, opts?: { al
       const [locked] = await tx.select().from(stringJobs).where(eq(stringJobs.id, id)).for("update");
       if (!locked) return null;
 
-      const patch: { status: JobStatus; updatedAt: Date; completedAt?: Date; collectedAt?: Date; inventoryProcessedAt?: Date | null } = { status, updatedAt: new Date() };
+      const patch: { status: JobStatus; updatedAt: Date; completedAt?: Date; collectedAt?: Date; inventoryProcessedAt?: Date | null; saleId?: string } = { status, updatedAt: new Date() };
       if (status === "completed" && !locked.completedAt) patch.completedAt = new Date();
       if (status === "collected" && !locked.collectedAt) patch.collectedAt = new Date();
 
@@ -305,9 +327,10 @@ export async function changeJobStatus(id: string, status: JobStatus, opts?: { al
 
       if (status === "completed" && locked.inventoryProcessedAt == null) {
         const lines = await tx.select().from(stringJobStrings).where(eq(stringJobStrings.stringJobId, id));
+        let stringCogsCents = 0;
         for (const line of lines) {
           if (line.customerSupplied || !line.stringProductId || !line.quantityUsed || Number(line.quantityUsed) <= 0) continue;
-          await allocateForRole({
+          const result = await allocateForRole({
             tx,
             stringJobId: id,
             role: line.role,
@@ -316,8 +339,30 @@ export async function changeJobStatus(id: string, status: JobStatus, opts?: { al
             unit: line.usageUnit ?? "m",
             allowOverride: !!opts?.allowStockOverride,
           });
+          stringCogsCents += result.cogsCents;
         }
         patch.inventoryProcessedAt = new Date();
+
+        // Phase 6 — the ONE linked Sale a String Job can ever create (brief
+        // §25/§27), guarded by the same inventoryProcessedAt idempotency
+        // lock as the inventory deduction above, PLUS locked.saleId itself:
+        // a job that was completed once (creating its Sale), reverted, and
+        // is now being re-completed has inventoryProcessedAt back to null
+        // (cleared on the revert below) but keeps its original saleId
+        // forever — this condition is what stops that re-completion from
+        // trying to create a second Sale and hitting sales.stringJobId's
+        // UNIQUE constraint.
+        if (locked.saleId == null) {
+          const services = await tx.select().from(stringJobServices).where(eq(stringJobServices.stringJobId, id));
+          const sale = await createJobSale(tx, {
+            stringJobId: id,
+            customerId: locked.customerId,
+            services: services.map((s) => ({ serviceName: s.serviceName, quantity: s.quantity, unitPriceCents: s.unitPriceCents, totalCents: s.totalCents })),
+            discountCents: locked.discountCents,
+            stringCogsCents,
+          });
+          patch.saleId = sale.id;
+        }
       } else if (!stockConsumingStatus && locked.inventoryProcessedAt != null) {
         await reverseAllocationsForRole(tx, id, "main", `Job status changed to ${status}`);
         await reverseAllocationsForRole(tx, id, "cross", `Job status changed to ${status}`);
@@ -337,8 +382,14 @@ export async function changeJobStatus(id: string, status: JobStatus, opts?: { al
   }
 }
 
+/** Phase 4's direct payment-status setter — refuses to write once the job
+ * has a linked Sale (Phase 6), since that Sale is the financial source of
+ * truth from that point on (brief §56) and this column is frozen at
+ * whatever it read at completion time. recordSalePayment (src/lib/sales.ts)
+ * is the equivalent action for a job with a linked Sale — the job detail
+ * page picks between the two based on whether linkedSale is set. */
 export async function changePaymentStatus(id: string, paymentStatus: JobPaymentStatus): Promise<StringJob | null> {
-  const [row] = await db.update(stringJobs).set({ paymentStatus, updatedAt: new Date() }).where(eq(stringJobs.id, id)).returning();
+  const [row] = await db.update(stringJobs).set({ paymentStatus, updatedAt: new Date() }).where(and(eq(stringJobs.id, id), isNull(stringJobs.saleId))).returning();
   return row ?? null;
 }
 
@@ -484,22 +535,29 @@ export interface JobDetail extends StringJob {
   stringRevenueCents: number;
   stringCogsCents: number;
   stringGrossProfitCents: number;
+  /** Phase 6 — the job's one linked Sale (see createJobSale in
+   * src/lib/sales.ts), null for a job never completed under Phase 6, or a
+   * job completed before it (see the Phase 6 report's migration notes).
+   * Once set, this is the financial source of truth for the job — its own
+   * paymentStatus column below is frozen from that point on. */
+  linkedSale: SaleDetail | null;
 }
 
 export async function getJob(id: string): Promise<JobDetail | null> {
   const [job] = await db.select().from(stringJobs).where(eq(stringJobs.id, id)).limit(1);
   if (!job) return null;
-  const [[customer], racketResult, strings, services, allocations] = await Promise.all([
+  const [[customer], racketResult, strings, services, allocations, linkedSale] = await Promise.all([
     db.select().from(customers).where(eq(customers.id, job.customerId)).limit(1),
     getRacket(job.customerRacketId),
     db.select().from(stringJobStrings).where(eq(stringJobStrings.stringJobId, id)),
     db.select().from(stringJobServices).where(eq(stringJobServices.stringJobId, id)),
     db.select().from(stringJobInventoryAllocations).where(and(eq(stringJobInventoryAllocations.stringJobId, id), isNull(stringJobInventoryAllocations.reversedAt))),
+    job.saleId ? getSale(job.saleId) : Promise.resolve(null),
   ]);
   if (!customer || !racketResult) return null;
   const stringRevenueCents = services.filter((s) => s.serviceName.trim().toLowerCase() === "string cost").reduce((sum, s) => sum + s.totalCents, 0);
   const stringCogsCents = allocations.reduce((sum, a) => sum + a.cogsAmountCents, 0);
-  return { ...job, customer, racket: racketResult.racket, strings, services, allocations, stringRevenueCents, stringCogsCents, stringGrossProfitCents: stringRevenueCents - stringCogsCents };
+  return { ...job, customer, racket: racketResult.racket, strings, services, allocations, stringRevenueCents, stringCogsCents, stringGrossProfitCents: stringRevenueCents - stringCogsCents, linkedSale };
 }
 
 export interface JobHistoryRow {
