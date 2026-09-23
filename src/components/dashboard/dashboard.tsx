@@ -427,7 +427,6 @@ export function Dashboard({
   salesStats,
   recentSales,
   monthFinancials,
-  yearFinancials,
   recentExpenses,
 }: {
   lowStock: MergedLowStockRow[];
@@ -435,7 +434,6 @@ export function Dashboard({
   salesStats: DashboardSalesStats;
   recentSales: RecentSaleRow[];
   monthFinancials: FinancialSummary;
-  yearFinancials: FinancialSummary;
   recentExpenses: ExpenseListRow[];
 }) {
   const t = DATA.today;
@@ -473,9 +471,8 @@ export function Dashboard({
         <div className="lab">Profit and loss</div>
         <div className="hair" />
       </div>
-      <div className="g2">
+      <div className="g1">
         <PL d={monthFinancials} label="This month" />
-        <PL d={yearFinancials} label="Year to date" />
       </div>
 
       <div className="g1">

@@ -10,17 +10,15 @@ if (!connectionString) {
 // `prepare: false` — Supabase's connection pooler runs in transaction mode
 // (port 6543), which doesn't support prepared statements.
 //
-// `max: 1` — Supabase's own recommendation for serverless (Vercel) on the
-// transaction pooler: postgres.js defaults to holding up to 10 connections
-// per client instance, and Vercel spins up many separate function
-// instances, each with its own client. Without this cap, concurrent
-// traffic (or even one request with a lot of parallel queries, like the
-// dashboard's Promise.all of several financial summaries) can open enough
-// connections across instances to exhaust the pooler's capacity — new
-// connection attempts then queue/hang rather than fail cleanly, which is
-// exactly what an indefinitely-loading page looks like. The transaction
-// pooler is what does the real multiplexing; each function instance only
-// needs to hold one connection at a time.
-const client = postgres(connectionString, { prepare: false, max: 1 });
+// NOT capping `max` here: this is a single-user app (brief: "no auth beyond
+// a deployment-level gate"), so cross-request connection-pool exhaustion
+// across many concurrent users was never the realistic risk. An earlier
+// attempt at `max: 1` was reverted — it forced every query within a single
+// request onto one connection, serializing what used to run in parallel,
+// which made pages that fire off many queries at once (the dashboard) slower
+// and pushed them into Vercel's function timeout instead of fixing anything.
+// The actual fix for that is doing less DB work per request (see
+// src/app/dashboard/page.tsx), not starving a single request of parallelism.
+const client = postgres(connectionString, { prepare: false });
 
 export const db = drizzle(client, { schema });

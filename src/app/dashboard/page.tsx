@@ -10,17 +10,20 @@ export const dynamic = "force-dynamic";
 export default async function DashboardPage() {
   const now = new Date();
   const [monthFrom, monthTo] = monthRange(now.getFullYear(), now.getMonth() + 1);
-  const yearFrom = new Date(now.getFullYear(), 0, 1);
-  const yearTo = new Date(now.getFullYear() + 1, 0, 1);
 
-  const [lowStockStrings, lowStockRetail, recentMovements, salesStats, recentSales, monthFinancials, yearFinancials, recentExpenses] = await Promise.all([
+  // Year-to-date was dropped from here (brief §46 only asks for THIS
+  // month's figures) — getFinancialSummary alone is ~10 queries, so a
+  // second call just for YTD roughly doubled the dashboard's DB work for a
+  // number nobody explicitly asked for, and was pushing this page past
+  // Vercel's function timeout in production. Full YTD is still one click
+  // away on /financials (set the range to "This year").
+  const [lowStockStrings, lowStockRetail, recentMovements, salesStats, recentSales, monthFinancials, recentExpenses] = await Promise.all([
     listLowStockStringProducts(),
     listLowStockRetailProducts(),
     listRecentMovements(),
     getDashboardSalesStats(),
     listRecentSales(),
     getFinancialSummary({ dateFrom: monthFrom, dateTo: monthTo }),
-    getFinancialSummary({ dateFrom: yearFrom, dateTo: yearTo }),
     listRecentExpenses(5),
   ]);
 
@@ -29,5 +32,5 @@ export default async function DashboardPage() {
     ...lowStockRetail.map((p) => ({ kind: "product" as const, productId: p.productId, label: p.label, available: String(p.available), unit: "unit", threshold: String(p.threshold), status: p.status })),
   ].sort((a, b) => Number(a.available) - Number(b.available));
 
-  return <Dashboard lowStock={lowStock} recentMovements={recentMovements} salesStats={salesStats} recentSales={recentSales} monthFinancials={monthFinancials} yearFinancials={yearFinancials} recentExpenses={recentExpenses} />;
+  return <Dashboard lowStock={lowStock} recentMovements={recentMovements} salesStats={salesStats} recentSales={recentSales} monthFinancials={monthFinancials} recentExpenses={recentExpenses} />;
 }
