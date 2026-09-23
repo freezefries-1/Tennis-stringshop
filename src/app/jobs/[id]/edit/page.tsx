@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { getJob } from "@/lib/jobs";
 import { getStringUsageDefaults } from "@/lib/settings";
 import { JobForm } from "@/components/jobs/job-form";
+import { CancelJobButton } from "@/components/jobs/cancel-job-button";
 import { updateJobAction } from "@/app/jobs/actions";
 import { toStringLine, type JobFormState } from "@/lib/job-form-types";
 
@@ -43,7 +44,10 @@ export default async function EditJobPage({ params }: { params: Promise<{ id: st
 
   return (
     <div className="ph-wrap" style={{ maxWidth: 1100 }}>
-      <h2 className="ph-title">Edit {job.code}</h2>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+        <h2 className="ph-title">Edit {job.code}</h2>
+        <CancelJobButton jobId={id} status={job.status} />
+      </div>
       <div style={{ marginTop: 16 }}>
         <JobForm
           mode="edit"
