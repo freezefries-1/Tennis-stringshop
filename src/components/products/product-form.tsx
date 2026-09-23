@@ -7,7 +7,8 @@ import { Card } from "@/components/ds/card";
 import { Field } from "@/components/ds/field";
 import { Input } from "@/components/ds/input";
 import { Button } from "@/components/ds/button";
-import { createProductAction, updateProductAction } from "@/app/products/actions";
+import { Combobox } from "@/components/ds/combobox";
+import { createProductAction, updateProductAction, quickCreateSupplierAction } from "@/app/products/actions";
 import type { Product, ProductCategory } from "@/lib/products";
 import type { Supplier } from "@/lib/string-inventory";
 
@@ -15,7 +16,7 @@ function selectStyle(): React.CSSProperties {
   return { height: 38, padding: "0 12px", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", background: "var(--paper-000)", fontFamily: "var(--font-body)", fontSize: 15, width: "100%" };
 }
 
-export function ProductForm({ mode, product, categories, suppliers }: { mode: "create" | "edit"; product?: Product; categories: ProductCategory[]; suppliers: Supplier[] }) {
+export function ProductForm({ mode, product, categories, suppliers: initialSuppliers }: { mode: "create" | "edit"; product?: Product; categories: ProductCategory[]; suppliers: Supplier[] }) {
   const router = useRouter();
   const [name, setName] = useState(product?.name ?? "");
   const [brand, setBrand] = useState(product?.brand ?? "");
@@ -26,7 +27,8 @@ export function ProductForm({ mode, product, categories, suppliers }: { mode: "c
   const [defaultSellingPrice, setDefaultSellingPrice] = useState(product?.defaultSellingPriceCents != null ? (product.defaultSellingPriceCents / 100).toFixed(2) : "");
   const [costPrice, setCostPrice] = useState(product?.costPriceCents != null ? (product.costPriceCents / 100).toFixed(2) : "");
   const [lowStockThreshold, setLowStockThreshold] = useState(product?.lowStockThreshold != null ? String(product.lowStockThreshold) : "");
-  const [supplierId, setSupplierId] = useState(product?.supplierId ?? "");
+  const [suppliers, setSuppliers] = useState(initialSuppliers);
+  const [supplier, setSupplier] = useState<Supplier | null>(initialSuppliers.find((s) => s.id === product?.supplierId) ?? null);
   const [trackInventory, setTrackInventory] = useState(product?.trackInventory ?? true);
   const [notes, setNotes] = useState(product?.notes ?? "");
 
@@ -45,7 +47,7 @@ export function ProductForm({ mode, product, categories, suppliers }: { mode: "c
       defaultSellingPriceCents: defaultSellingPrice.trim() ? Math.round(Number.parseFloat(defaultSellingPrice) * 100) : null,
       costPriceCents: costPrice.trim() ? Math.round(Number.parseFloat(costPrice) * 100) : null,
       lowStockThreshold: lowStockThreshold.trim() ? Math.round(Number.parseFloat(lowStockThreshold)) : null,
-      supplierId: supplierId || null,
+      supplierId: supplier?.id ?? null,
       trackInventory,
       notes: notes || null,
     };
@@ -129,16 +131,21 @@ export function ProductForm({ mode, product, categories, suppliers }: { mode: "c
           <Field label="Low stock threshold" hint="Optional — falls back to the Settings default" htmlFor="lst">
             <Input id="lst" type="number" inputMode="numeric" min="0" step="1" value={lowStockThreshold} onChange={(e) => setLowStockThreshold(e.target.value)} suffix="units" style={{ width: "100%" }} />
           </Field>
-          <Field label="Supplier" hint="Optional">
-            <select value={supplierId} onChange={(e) => setSupplierId(e.target.value)} style={selectStyle()}>
-              <option value="">—</option>
-              {suppliers.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </Field>
+          <Combobox
+            label="Supplier"
+            placeholder="Search or add a supplier…"
+            options={suppliers}
+            getLabel={(s) => s.name}
+            getKey={(s) => s.id}
+            selected={supplier}
+            onSelect={setSupplier}
+            addNewLabel="Add supplier"
+            onAddNew={async (q) => {
+              const created = await quickCreateSupplierAction(q);
+              setSuppliers((s) => [...s, created]);
+              setSupplier(created);
+            }}
+          />
         </div>
       ) : null}
       <Field label="Notes" htmlFor="notes">
