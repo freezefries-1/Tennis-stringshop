@@ -273,20 +273,42 @@ export interface LowStockRow {
   status: "low_stock" | "out_of_stock";
 }
 
+/** Dashboard/summary-card version — filters and limits in SQL rather than
+ * fetching every string product (as the old implementation did, via
+ * listStringProducts) and filtering in JS. listStringProducts stays as-is
+ * for the /inventory list page, which genuinely needs every row for
+ * client-side search/filter at this app's scale; this one only ever needs
+ * a handful of rows. */
 export async function listLowStockProducts(limit = 8): Promise<LowStockRow[]> {
-  const products = await listStringProducts({});
-  return products
-    .filter((p) => p.status === "low_stock" || p.status === "out_of_stock")
-    .sort((a, b) => Number(a.available) - Number(b.available))
-    .slice(0, limit)
-    .map((p) => ({
-      productId: p.id,
-      label: [p.brand, p.name, p.gauge ? `${p.gauge}mm` : null, p.colour].filter(Boolean).join(" "),
-      available: p.available,
-      unit: p.trackingUnit,
-      threshold: p.effectiveThreshold,
-      status: p.status as "low_stock" | "out_of_stock",
-    }));
+  const defaults = await getInventoryDefaults();
+  const defaultThreshold = sql`case when ${stringProducts.trackingUnit} = 'set' then ${defaults.lowStockThresholdSets}::numeric else ${defaults.lowStockThresholdM}::numeric end`;
+  const rows = await db
+    .select({
+      id: stringProducts.id,
+      brand: stringProducts.brand,
+      name: stringProducts.name,
+      gauge: stringProducts.gauge,
+      colour: stringProducts.colour,
+      trackingUnit: stringProducts.trackingUnit,
+      threshold: sql<string>`coalesce(${stringProducts.lowStockThreshold}, ${defaultThreshold})`,
+      available: sql<string>`coalesce(sum(${stringInventoryBatches.remainingQuantity}) filter (where ${stringInventoryBatches.remainingQuantity} > 0), 0)`,
+    })
+    .from(stringProducts)
+    .leftJoin(stringInventoryBatches, eq(stringInventoryBatches.stringProductId, stringProducts.id))
+    .where(isNull(stringProducts.archivedAt))
+    .groupBy(stringProducts.id, stringProducts.brand, stringProducts.name, stringProducts.gauge, stringProducts.colour, stringProducts.trackingUnit, stringProducts.lowStockThreshold)
+    .having(sql`coalesce(sum(${stringInventoryBatches.remainingQuantity}) filter (where ${stringInventoryBatches.remainingQuantity} > 0), 0) <= coalesce(${stringProducts.lowStockThreshold}, ${defaultThreshold})`)
+    .orderBy(sql`coalesce(sum(${stringInventoryBatches.remainingQuantity}) filter (where ${stringInventoryBatches.remainingQuantity} > 0), 0) asc`, asc(stringProducts.brand), asc(stringProducts.name))
+    .limit(limit);
+
+  return rows.map((r) => ({
+    productId: r.id,
+    label: [r.brand, r.name, r.gauge ? `${r.gauge}mm` : null, r.colour].filter(Boolean).join(" "),
+    available: r.available,
+    unit: r.trackingUnit,
+    threshold: r.threshold,
+    status: Number(r.available) <= 0 ? "out_of_stock" : "low_stock",
+  }));
 }
 
 // -- suppliers -----------------------------------------------------------

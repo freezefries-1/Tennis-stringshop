@@ -314,19 +314,37 @@ export interface LowStockRow {
   status: "low_stock" | "out_of_stock";
 }
 
+/** Dashboard/summary-card version — filters and limits in SQL rather than
+ * fetching every product (as the old implementation did, via listProducts)
+ * and filtering in JS. listProducts stays as-is for the /products list
+ * page, which genuinely needs every row for client-side search/filter at
+ * this app's scale; this one only ever needs a handful of rows. */
 export async function listLowStockProducts(limit = 8): Promise<LowStockRow[]> {
-  const rows = await listProducts({});
-  return rows
-    .filter((r) => r.status === "low_stock" || r.status === "out_of_stock")
-    .sort((a, b) => a.available - b.available)
-    .slice(0, limit)
-    .map((r) => ({
-      productId: r.id,
-      label: [r.brand, r.name, r.variant].filter(Boolean).join(" "),
-      available: r.available,
-      threshold: r.effectiveThreshold,
-      status: r.status as "low_stock" | "out_of_stock",
-    }));
+  const defaults = await getInventoryDefaults();
+  const rows = await db
+    .select({
+      id: products.id,
+      brand: products.brand,
+      name: products.name,
+      variant: products.variant,
+      threshold: sql<number>`coalesce(${products.lowStockThreshold}, ${defaults.lowStockThresholdUnits})::int`,
+      available: sql<number>`coalesce(sum(${productInventoryBatches.remainingQuantity}) filter (where ${productInventoryBatches.remainingQuantity} > 0), 0)::int`,
+    })
+    .from(products)
+    .leftJoin(productInventoryBatches, eq(productInventoryBatches.productId, products.id))
+    .where(and(isNull(products.archivedAt), eq(products.trackInventory, true)))
+    .groupBy(products.id, products.brand, products.name, products.variant, products.lowStockThreshold)
+    .having(sql`coalesce(sum(${productInventoryBatches.remainingQuantity}) filter (where ${productInventoryBatches.remainingQuantity} > 0), 0) <= coalesce(${products.lowStockThreshold}, ${defaults.lowStockThresholdUnits})`)
+    .orderBy(sql`coalesce(sum(${productInventoryBatches.remainingQuantity}) filter (where ${productInventoryBatches.remainingQuantity} > 0), 0) asc`, asc(products.name), asc(products.brand))
+    .limit(limit);
+
+  return rows.map((r) => ({
+    productId: r.id,
+    label: [r.brand, r.name, r.variant].filter(Boolean).join(" "),
+    available: r.available,
+    threshold: r.threshold,
+    status: r.available <= 0 ? "out_of_stock" : "low_stock",
+  }));
 }
 
 // -- receiving stock -------------------------------------------------------

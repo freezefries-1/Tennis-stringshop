@@ -983,7 +983,7 @@ export interface DashboardSalesStats {
 /** Dashboard's Phase 6 numbers (brief §44) — Sales only, per the
  * single-source-of-truth rule at the top of this file. */
 export async function getDashboardSalesStats(): Promise<DashboardSalesStats> {
-  const [[today], [month], unpaidRows] = await Promise.all([
+  const [[today], [month], unpaidRows, [monthItems]] = await Promise.all([
     db.select({ total: sql<string>`coalesce(sum(${sales.totalCents}), 0)` }).from(sales).where(and(gte(sales.occurredAt, sql`date_trunc('day', now())`), sql`${sales.status} != 'cancelled'`)),
     db.select({ total: sql<string>`coalesce(sum(${sales.totalCents}), 0)` }).from(sales).where(and(gte(sales.occurredAt, sql`date_trunc('month', now())`), sql`${sales.status} != 'cancelled'`)),
     // A LEFT JOIN + GROUP BY rather than a correlated subquery in the
@@ -1002,12 +1002,15 @@ export async function getDashboardSalesStats(): Promise<DashboardSalesStats> {
       // nothing is actually owed, matching getSalesSummary's own filter.
       .where(and(inArray(sales.paymentStatus, ["unpaid", "partially_paid"]), sql`${sales.status} != 'cancelled'`))
       .groupBy(sales.id, sales.totalCents),
+    // Independent of the three above (own join, own date filter) — ran as
+    // a separate sequential await before, adding its full round-trip time
+    // on top of the Promise.all instead of overlapping with it.
+    db
+      .select({ cogs: sql<string>`coalesce(sum(${saleItems.cogsAmountCents}), 0)` })
+      .from(saleItems)
+      .innerJoin(sales, eq(sales.id, saleItems.saleId))
+      .where(and(gte(sales.occurredAt, sql`date_trunc('month', now())`), sql`${sales.status} != 'cancelled'`)),
   ]);
-  const [monthItems] = await db
-    .select({ cogs: sql<string>`coalesce(sum(${saleItems.cogsAmountCents}), 0)` })
-    .from(saleItems)
-    .innerJoin(sales, eq(sales.id, saleItems.saleId))
-    .where(and(gte(sales.occurredAt, sql`date_trunc('month', now())`), sql`${sales.status} != 'cancelled'`));
   const monthRevenueCents = Number(month?.total ?? 0);
   const monthCogsCents = Number(monthItems?.cogs ?? 0);
 

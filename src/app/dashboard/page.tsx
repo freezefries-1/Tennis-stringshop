@@ -7,7 +7,20 @@ import { listRecentExpenses } from "@/lib/expenses";
 
 export const dynamic = "force-dynamic";
 
+// TEMPORARY — production timeout diagnosis (remove once the live 504 is
+// confirmed resolved). Times each of the Dashboard's top-level parallel
+// queries independently so a slow one shows up by name in server logs
+// instead of only a single opaque total. No request/customer data logged,
+// only query name + duration + row/shape info.
+async function timed<T>(name: string, fn: () => Promise<T>): Promise<T> {
+  const start = Date.now();
+  const result = await fn();
+  console.log(`[dashboard timing] ${name}: ${Date.now() - start}ms`);
+  return result;
+}
+
 export default async function DashboardPage() {
+  const pageStart = Date.now();
   const now = new Date();
   const [monthFrom, monthTo] = monthRange(now.getFullYear(), now.getMonth() + 1);
 
@@ -18,14 +31,15 @@ export default async function DashboardPage() {
   // Vercel's function timeout in production. Full YTD is still one click
   // away on /financials (set the range to "This year").
   const [lowStockStrings, lowStockRetail, recentMovements, salesStats, recentSales, monthFinancials, recentExpenses] = await Promise.all([
-    listLowStockStringProducts(),
-    listLowStockRetailProducts(),
-    listRecentMovements(),
-    getDashboardSalesStats(),
-    listRecentSales(),
-    getFinancialSummary({ dateFrom: monthFrom, dateTo: monthTo }),
-    listRecentExpenses(5),
+    timed("listLowStockStringProducts", () => listLowStockStringProducts()),
+    timed("listLowStockRetailProducts", () => listLowStockRetailProducts()),
+    timed("listRecentMovements", () => listRecentMovements()),
+    timed("getDashboardSalesStats", () => getDashboardSalesStats()),
+    timed("listRecentSales", () => listRecentSales()),
+    timed("getFinancialSummary (month)", () => getFinancialSummary({ dateFrom: monthFrom, dateTo: monthTo })),
+    timed("listRecentExpenses", () => listRecentExpenses(5)),
   ]);
+  console.log(`[dashboard timing] TOTAL: ${Date.now() - pageStart}ms`);
 
   const lowStock = [
     ...lowStockStrings.map((s) => ({ kind: "string" as const, productId: s.productId, label: s.label, available: s.available, unit: s.unit as string, threshold: s.threshold, status: s.status })),
