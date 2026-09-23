@@ -18,8 +18,14 @@ function auditFieldSummary(values: unknown): string {
   if ("amountCents" in v) parts.push(`Amount ${formatCents(Number(v.amountCents))}`);
   if ("incomeDate" in v) parts.push(`Date ${v.incomeDate}`);
   if ("description" in v) parts.push(`"${v.description}"`);
+  if ("category" in v) parts.push(`Category "${v.category}"`);
   if ("status" in v) parts.push(`Status ${v.status}`);
   return parts.join(" · ") || "—";
+}
+
+const DIFF_ACTIONS = new Set(["updated", "category_renamed"]);
+function auditActionLabel(action: string): string {
+  return action.replace(/_/g, " ");
 }
 
 export default async function OtherIncomeDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -83,10 +89,10 @@ export default async function OtherIncomeDetailPage({ params }: { params: Promis
             {auditLog.map((row) => (
               <div key={row.id} style={{ fontSize: 13.5, borderTop: "1px solid var(--border-hairline)", paddingTop: 8 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-                  <span style={{ textTransform: "capitalize", fontWeight: 500 }}>{row.action}</span>
+                  <span style={{ textTransform: "capitalize", fontWeight: 500 }}>{auditActionLabel(row.action)}</span>
                   <span className="row-s">{formatDate(row.createdAt)}</span>
                 </div>
-                {row.action === "updated" ? (
+                {DIFF_ACTIONS.has(row.action) ? (
                   <div className="row-s" style={{ marginTop: 2 }}>
                     {auditFieldSummary(row.oldValues)} → {auditFieldSummary(row.newValues)}
                   </div>

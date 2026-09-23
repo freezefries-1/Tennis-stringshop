@@ -6,8 +6,10 @@ import {
   exportOtherIncomeCsv,
   getOtherIncome,
   listCategoriesInUse,
+  listCategoriesWithCounts,
   listOtherIncomeAuditLog,
   listOtherIncomePage,
+  renameOtherIncomeCategory,
   updateOtherIncome,
   voidOtherIncome,
   type OtherIncomeInput,
@@ -16,6 +18,17 @@ import {
 
 export async function fetchCategoriesInUse() {
   return listCategoriesInUse();
+}
+
+export async function fetchCategoriesWithCounts() {
+  return listCategoriesWithCounts();
+}
+
+export async function renameOtherIncomeCategoryAction(oldCategory: string, newCategory: string) {
+  const count = await renameOtherIncomeCategory(oldCategory, newCategory);
+  revalidatePath("/other-income");
+  revalidatePath("/other-income/categories");
+  return { count };
 }
 
 export interface SaveOtherIncomeResult {

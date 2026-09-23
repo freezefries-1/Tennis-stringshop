@@ -183,6 +183,47 @@ export async function listCategoriesInUse(): Promise<string[]> {
   return rows.map((r) => r.category);
 }
 
+export interface OtherIncomeCategoryUsage {
+  category: string;
+  count: number;
+}
+
+/** Powers the "Manage categories" page — category is free text (see the
+ * file comment above), so "the categories" are just whatever distinct
+ * values are currently on a record, each with how many records use it.
+ * Voided records are included in the count — renaming should still catch
+ * every record, not just live ones, since a category typo doesn't stop
+ * being a typo once the record is voided. */
+export async function listCategoriesWithCounts(): Promise<OtherIncomeCategoryUsage[]> {
+  const rows = await db
+    .select({ category: otherIncome.category, count: sql<string>`count(*)` })
+    .from(otherIncome)
+    .groupBy(otherIncome.category)
+    .orderBy(asc(otherIncome.category));
+  return rows.map((r) => ({ category: r.category, count: Number(r.count) }));
+}
+
+/** Renames a category across every record that uses it (live and voided),
+ * in one go — the point of this over editing records one by one. Each
+ * affected row gets its own audit-log entry, same as any other category
+ * edit, so the change stays traceable per record. Returns how many rows
+ * were updated (0 if oldCategory wasn't in use, e.g. a stale/duplicate
+ * click). A no-op rename (same name) still returns the count without
+ * writing anything, since nothing actually changed. */
+export async function renameOtherIncomeCategory(oldCategory: string, newCategory: string): Promise<number> {
+  const trimmedNew = newCategory.trim();
+  return db.transaction(async (tx) => {
+    const rows = await tx.select({ id: otherIncome.id }).from(otherIncome).where(eq(otherIncome.category, oldCategory));
+    if (rows.length === 0 || trimmedNew === oldCategory) return rows.length;
+
+    await tx.update(otherIncome).set({ category: trimmedNew, updatedAt: new Date() }).where(eq(otherIncome.category, oldCategory));
+    for (const row of rows) {
+      await writeAuditLog(tx, row.id, "category_renamed", { category: oldCategory }, { category: trimmedNew });
+    }
+    return rows.length;
+  });
+}
+
 // -- summary ------------------------------------------------------------
 
 /** Recorded (not voided) total in range — the one number

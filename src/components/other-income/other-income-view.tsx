@@ -101,6 +101,11 @@ export function OtherIncomeView({
   return (
     <div className="rec-wrap">
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
+        <Link href="/other-income/categories">
+          <Button size="sm" variant="ghost">
+            Manage categories
+          </Button>
+        </Link>
         <Link href="/other-income/new">
           <Button size="sm" iconLeft="plus">
             Add income
