@@ -38,6 +38,15 @@ function isDone(j: JobListRow): boolean {
   return j.status === "collected" && j.paymentStatus === "paid";
 }
 
+/** Cancelled jobs get their own show/hide toggle rather than sharing
+ * isDone's — a cancelled job that didn't go ahead still sometimes needs
+ * reopening/editing (a customer changes their mind, or it was cancelled by
+ * mistake), so it stays fully findable, just decluttered from the default
+ * view separately from "done" jobs. */
+function isCancelled(j: JobListRow): boolean {
+  return j.status === "cancelled";
+}
+
 export function JobsView({ jobs, stats }: { jobs: JobListRow[]; stats: JobStats }) {
   const router = useRouter();
   const [q, setQ] = useState("");
@@ -46,18 +55,25 @@ export function JobsView({ jobs, stats }: { jobs: JobListRow[]; stats: JobStats 
   const [due, setDue] = useState<DueFilter>("");
   const [sort, setSort] = useState<SortKey>("receivedOn");
   const [showDone, setShowDone] = useState(false);
+  const [showCancelled, setShowCancelled] = useState(false);
 
   const doneCount = useMemo(() => jobs.filter(isDone).length, [jobs]);
+  const cancelledCount = useMemo(() => jobs.filter(isCancelled).length, [jobs]);
   // Searching or explicitly asking for Collected/Paid always reveals done
   // jobs too — the hide is only a default-view declutter, never a place
   // data actually goes missing.
   const revealDone = showDone || q.trim() !== "" || status === "collected" || paymentStatus === "paid";
+  // Same declutter-only reasoning, but a separate toggle from isDone's —
+  // cancelled jobs sometimes need reopening/editing, so an explicit
+  // "Cancelled" status filter or a search hit reveals them too.
+  const revealCancelled = showCancelled || q.trim() !== "" || status === "cancelled";
 
   const filtered = useMemo(() => {
     const s = normalize(q);
     const digits = digitsOnly(q);
     let rows = jobs.filter((j) => {
       if (!revealDone && isDone(j)) return false;
+      if (!revealCancelled && isCancelled(j)) return false;
       if (status && j.status !== status) return false;
       if (paymentStatus && j.paymentStatus !== paymentStatus) return false;
       if (due === "today") {
@@ -86,7 +102,7 @@ export function JobsView({ jobs, stats }: { jobs: JobListRow[]; stats: JobStats 
       }
     });
     return rows;
-  }, [jobs, q, status, paymentStatus, due, sort, revealDone]);
+  }, [jobs, q, status, paymentStatus, due, sort, revealDone, revealCancelled]);
 
   const goTo = (id: string) => router.push(`/jobs/${id}`);
 
@@ -147,11 +163,21 @@ export function JobsView({ jobs, stats }: { jobs: JobListRow[]; stats: JobStats 
         </select>
       </div>
 
-      {doneCount > 0 ? (
-        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13.5, color: "var(--ink-600)" }}>
-          <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} />
-          Show completed &amp; paid ({doneCount})
-        </label>
+      {doneCount > 0 || cancelledCount > 0 ? (
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+          {doneCount > 0 ? (
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13.5, color: "var(--ink-600)" }}>
+              <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} />
+              Show completed &amp; paid ({doneCount})
+            </label>
+          ) : null}
+          {cancelledCount > 0 ? (
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13.5, color: "var(--ink-600)" }}>
+              <input type="checkbox" checked={showCancelled} onChange={(e) => setShowCancelled(e.target.checked)} />
+              Show cancelled ({cancelledCount})
+            </label>
+          ) : null}
+        </div>
       ) : null}
 
       {filtered.length === 0 ? (
