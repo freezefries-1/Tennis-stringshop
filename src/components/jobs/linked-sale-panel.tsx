@@ -86,6 +86,7 @@ function AddProductForm({ saleId, jobId }: { saleId: string; jobId: string }) {
   const [results, setResults] = useState<PosSearchResult[]>([]);
   const [adding, setAdding] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [justAdded, setJustAdded] = useState<string | null>(null);
 
   useEffect(() => {
     const query = q.trim();
@@ -103,7 +104,14 @@ function AddProductForm({ saleId, jobId }: { saleId: string; jobId: string }) {
 
   if (!open) {
     return (
-      <Button size="sm" variant="secondary" onClick={() => setOpen(true)}>
+      <Button
+        size="sm"
+        variant="secondary"
+        onClick={() => {
+          setOpen(true);
+          setJustAdded(null);
+        }}
+      >
         Add product to sale
       </Button>
     );
@@ -111,8 +119,21 @@ function AddProductForm({ saleId, jobId }: { saleId: string; jobId: string }) {
 
   return (
     <Card tone="sunken" padding="14px" style={{ display: "flex", flexDirection: "column", gap: 8, maxWidth: 360 }}>
+      {justAdded ? (
+        <span style={{ fontSize: 12.5, color: "var(--signal-success)", fontWeight: 500 }}>
+          ✓ Added {justAdded} — see it in the list above, or search below to add another.
+        </span>
+      ) : null}
       {error ? <span style={{ fontSize: 12.5, color: "var(--signal-danger)" }}>{error}</span> : null}
-      <Input placeholder="Search product…" value={q} onChange={(e) => setQ(e.target.value)} style={{ width: "100%" }} />
+      <Input
+        placeholder="Search product…"
+        value={q}
+        onChange={(e) => {
+          setQ(e.target.value);
+          setJustAdded(null);
+        }}
+        style={{ width: "100%" }}
+      />
       {q.trim() ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 200, overflowY: "auto" }}>
           {results.length === 0 ? (
@@ -127,13 +148,16 @@ function AddProductForm({ saleId, jobId }: { saleId: string; jobId: string }) {
                 onClick={async () => {
                   setAdding(r.id);
                   setError(null);
+                  setJustAdded(null);
                   const result = await addProductToJobSaleAction(saleId, jobId, r.id, 1);
                   setAdding(null);
                   if (!result.ok) {
                     setError(result.reason === "sale_locked" ? "This sale already has a payment — can't add more items to it." : "Not enough stock for this product.");
                     return;
                   }
-                  setOpen(false);
+                  setJustAdded(r.label);
+                  setQ("");
+                  setResults([]);
                   router.refresh();
                 }}
               >
@@ -146,7 +170,14 @@ function AddProductForm({ saleId, jobId }: { saleId: string; jobId: string }) {
           )}
         </div>
       ) : null}
-      <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={() => {
+          setOpen(false);
+          setJustAdded(null);
+        }}
+      >
         Close
       </Button>
     </Card>
@@ -172,6 +203,25 @@ export function LinkedSalePanel({ jobId, sale }: { jobId: string; sale: SaleDeta
           {formatCents(sale.paidCents)} paid of {formatCents(sale.totalCents)}
         </span>
       </div>
+
+      {/* Always visible, not just after clicking Add — this is the direct
+       * fix for "I clicked but nothing seemed to happen": the current
+       * contents of the sale are right here, no need to guess or click
+       * through to /sales/[id] to find out. */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        {sale.items.map((item) => (
+          <div key={item.id} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13.5 }}>
+            <span>
+              {item.quantity}× {item.descriptionSnapshot}
+              {Number(item.returnedQuantity) > 0 ? <span className="row-s"> · {item.returnedQuantity} returned</span> : null}
+            </span>
+            <span className="num" style={{ flexShrink: 0 }}>
+              {formatCents(item.lineTotalCents)}
+            </span>
+          </div>
+        ))}
+      </div>
+
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <TakePaymentForm saleId={sale.id} jobId={jobId} balanceDueCents={sale.balanceDueCents} />
         <AddProductForm saleId={sale.id} jobId={jobId} />
