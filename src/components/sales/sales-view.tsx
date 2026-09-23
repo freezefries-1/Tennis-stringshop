@@ -308,7 +308,12 @@ export function SalesView({
       )}
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
-        <div className="row-s">{totalCount === 0 ? "0 sales" : `${rangeStart}–${rangeEnd} of ${totalCount} sale${totalCount === 1 ? "" : "s"}`}</div>
+        {/* Deliberately "entries", not "sales" — totalCount is every row
+         * currently listed (cancelled sales and return/refund rows included,
+         * since those are real, clickable rows you can dig into), while the
+         * "Number of sales" stat card above counts primary transactions only
+         * (see getSalesSummary). The two numbers can legitimately differ. */}
+        <div className="row-s">{totalCount === 0 ? "0 entries" : `${rangeStart}–${rangeEnd} of ${totalCount} entr${totalCount === 1 ? "y" : "ies"}`}</div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <select value={pageSize} onChange={(e) => pushFilters({ pageSize: Number(e.target.value), page: 1 })} style={selectStyle()}>
             {PAGE_SIZES.map((n) => (
