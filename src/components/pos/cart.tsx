@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Input } from "@/components/ds/input";
 import { Field } from "@/components/ds/field";
 import { Icon } from "@/components/ds/icon";
@@ -17,6 +18,16 @@ export function Cart({ lines, onChange }: { lines: CartLine[]; onChange: (lines:
   const update = (key: string, patch: Partial<CartLine>) => onChange(lines.map((l) => (l.key === key ? { ...l, ...patch } : l)));
   const remove = (key: string) => onChange(lines.filter((l) => l.key !== key));
   const step = (l: CartLine) => (l.unit === "m" ? 0.1 : 1);
+
+  // Unit price/discount are stored as cents and displayed via .toFixed(2),
+  // which reformats on every keystroke and fights whatever's mid-typed (e.g.
+  // typing "12.50" snaps to "12.00" after the first digit, then every further
+  // keystroke lands after that fixed text and rounds straight back to it).
+  // Keep the raw text the user is typing here and only fall back to the
+  // formatted value once there's no in-progress edit for that field.
+  const [priceDrafts, setPriceDrafts] = useState<Record<string, string>>({});
+  const [discountDrafts, setDiscountDrafts] = useState<Record<string, string>>({});
+  const clearDraft = (setter: typeof setPriceDrafts, key: string) => setter((d) => Object.fromEntries(Object.entries(d).filter(([k]) => k !== key)));
 
   if (lines.length === 0) {
     return <div className="rec-empty">Cart is empty — search above to add items.</div>;
@@ -45,8 +56,13 @@ export function Cart({ lines, onChange }: { lines: CartLine[]; onChange: (lines:
                 inputMode="decimal"
                 min="0"
                 step="0.01"
-                value={(l.unitPriceCents / 100).toFixed(2)}
-                onChange={(e) => update(l.key, { unitPriceCents: Math.round((Number.parseFloat(e.target.value) || 0) * 100) })}
+                value={priceDrafts[l.key] ?? (l.unitPriceCents / 100).toFixed(2)}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  setPriceDrafts((d) => ({ ...d, [l.key]: raw }));
+                  update(l.key, { unitPriceCents: Math.round((Number.parseFloat(raw) || 0) * 100) });
+                }}
+                onBlur={() => clearDraft(setPriceDrafts, l.key)}
                 style={{ width: "100%", minWidth: 0 }}
               />
             </Field>
@@ -56,8 +72,13 @@ export function Cart({ lines, onChange }: { lines: CartLine[]; onChange: (lines:
                 inputMode="decimal"
                 min="0"
                 step="0.01"
-                value={(l.discountCents / 100).toFixed(2)}
-                onChange={(e) => update(l.key, { discountCents: Math.round((Number.parseFloat(e.target.value) || 0) * 100) })}
+                value={discountDrafts[l.key] ?? (l.discountCents / 100).toFixed(2)}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  setDiscountDrafts((d) => ({ ...d, [l.key]: raw }));
+                  update(l.key, { discountCents: Math.round((Number.parseFloat(raw) || 0) * 100) });
+                }}
+                onBlur={() => clearDraft(setDiscountDrafts, l.key)}
                 style={{ width: "100%", minWidth: 0 }}
               />
             </Field>
