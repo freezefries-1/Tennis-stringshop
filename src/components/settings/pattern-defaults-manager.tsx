@@ -26,19 +26,29 @@ function toDraft(row?: StringPatternDefault): RowDraft {
 
 function DraftRow({ draft, onChange, patternDisabled }: { draft: RowDraft; onChange: (patch: Partial<RowDraft>) => void; patternDisabled?: boolean }) {
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 100px 100px 100px", gap: 8, alignItems: "start" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       <Field label="Pattern" hint={patternDisabled ? undefined : "e.g. 16x19"}>
         <Input value={draft.pattern} onChange={(e) => onChange({ pattern: e.target.value })} placeholder="16x19" disabled={patternDisabled} style={{ width: "100%" }} />
       </Field>
-      <Field label="Full bed">
-        <Input type="number" inputMode="decimal" min="0" step="0.1" value={draft.fullBedLengthM} onChange={(e) => onChange({ fullBedLengthM: e.target.value })} suffix="m" style={{ width: "100%" }} />
-      </Field>
-      <Field label="Mains">
-        <Input type="number" inputMode="decimal" min="0" step="0.1" value={draft.mainLengthM} onChange={(e) => onChange({ mainLengthM: e.target.value })} suffix="m" style={{ width: "100%" }} />
-      </Field>
-      <Field label="Crosses">
-        <Input type="number" inputMode="decimal" min="0" step="0.1" value={draft.crossLengthM} onChange={(e) => onChange({ crossLengthM: e.target.value })} suffix="m" style={{ width: "100%" }} />
-      </Field>
+      {/* minmax(0, 1fr) rather than a bare 1fr — Input's own wrapper has a
+       * fixed minWidth of 160px (src/components/ds/input.tsx), which a
+       * plain 1fr track would still respect, overflowing the card on
+       * narrow screens; minmax(0, ...) lets the track shrink below that,
+       * and the matching minWidth: 0 below removes the 160px floor itself.
+       * The three length fields sit on their own row, below Pattern, for
+       * the same reason — keep the whole control inside its card at any
+       * width. */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8 }}>
+        <Field label="Full bed">
+          <Input type="number" inputMode="decimal" min="0" step="0.1" value={draft.fullBedLengthM} onChange={(e) => onChange({ fullBedLengthM: e.target.value })} suffix="m" style={{ width: "100%", minWidth: 0 }} />
+        </Field>
+        <Field label="Mains">
+          <Input type="number" inputMode="decimal" min="0" step="0.1" value={draft.mainLengthM} onChange={(e) => onChange({ mainLengthM: e.target.value })} suffix="m" style={{ width: "100%", minWidth: 0 }} />
+        </Field>
+        <Field label="Crosses">
+          <Input type="number" inputMode="decimal" min="0" step="0.1" value={draft.crossLengthM} onChange={(e) => onChange({ crossLengthM: e.target.value })} suffix="m" style={{ width: "100%", minWidth: 0 }} />
+        </Field>
+      </div>
     </div>
   );
 }
