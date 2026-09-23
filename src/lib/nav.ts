@@ -12,7 +12,10 @@ export interface NavItem {
 export const NAV: NavItem[] = [
   { section: "Bench" },
   { value: "dashboard", label: "Dashboard", icon: "layout-dashboard" },
-  { value: "jobs", label: "String jobs", icon: "wrench", count: 12 },
+  // count is intentionally omitted here — the sidebar shows a real,
+  // live active-jobs count for this one entry (see nav-actions.ts),
+  // not a static seed-data number the way inventory's still does.
+  { value: "jobs", label: "String jobs", icon: "wrench" },
   { value: "pos", label: "POS", icon: "scan-line" },
   { section: "People" },
   { value: "customers", label: "Customers", icon: "users" },
