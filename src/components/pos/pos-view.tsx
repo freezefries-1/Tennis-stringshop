@@ -238,7 +238,7 @@ export function PosView({ initialCustomer }: { initialCustomer: PickerCustomer |
               ))}
             </select>
           </Field>
-          <Field label="Amount received" hint="Defaults to the total — set to 0 to leave unpaid" style={{ width: 140, minWidth: 0 }}>
+          <Field label="Amount received" style={{ width: 140, minWidth: 0 }}>
             <Input
               type="number"
               inputMode="decimal"
@@ -254,6 +254,7 @@ export function PosView({ initialCustomer }: { initialCustomer: PickerCustomer |
             />
           </Field>
         </div>
+        <div style={{ fontFamily: "var(--font-body)", fontSize: "var(--text-body-s)", color: "var(--text-muted)" }}>Amount received defaults to the total — set to 0 to leave unpaid.</div>
         <Field label="Notes" htmlFor="notes" hint="Optional">
           <Input id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} style={{ width: "100%" }} />
         </Field>

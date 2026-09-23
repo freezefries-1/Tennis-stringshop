@@ -70,7 +70,7 @@ export function Cart({ lines, onChange }: { lines: CartLine[]; onChange: (lines:
             <Field label={l.unit === "reel" ? "Reels" : "Qty"} style={{ width: 84, minWidth: 0 }}>
               <Input type="number" inputMode="decimal" min="0" step={step(l)} value={String(l.quantity)} onChange={(e) => update(l.key, { quantity: Number(e.target.value) || 0 })} style={{ width: "100%", minWidth: 0 }} />
             </Field>
-            <Field label="Unit price" style={{ width: 100, minWidth: 0 }} hint={l.unitPriceCents !== l.standardPriceCentsSnapshot ? `Standard ${formatCents(l.standardPriceCentsSnapshot)}` : undefined}>
+            <Field label="Unit price" style={{ width: 100, minWidth: 0 }}>
               <Input
                 type="number"
                 inputMode="decimal"
@@ -106,6 +106,9 @@ export function Cart({ lines, onChange }: { lines: CartLine[]; onChange: (lines:
               {formatCents(lineTotalCents(l))}
             </div>
           </div>
+          {l.unitPriceCents !== l.standardPriceCentsSnapshot ? (
+            <div style={{ fontFamily: "var(--font-body)", fontSize: "var(--text-body-s)", color: "var(--text-muted)" }}>Standard price {formatCents(l.standardPriceCentsSnapshot)}</div>
+          ) : null}
         </div>
       ))}
     </div>
