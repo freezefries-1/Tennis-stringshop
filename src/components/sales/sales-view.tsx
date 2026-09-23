@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ds/input";
+import { Field } from "@/components/ds/field";
 import { Card } from "@/components/ds/card";
 import { Badge } from "@/components/ds/badge";
 import { formatCents, formatDate } from "@/lib/format";
@@ -17,22 +18,88 @@ function selectStyle(): React.CSSProperties {
   return { height: 38, padding: "0 12px", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", background: "var(--paper-000)", fontFamily: "var(--font-body)", fontSize: 14 };
 }
 
+type DateFilter = "all" | "today" | "week" | "month" | "last_month" | "year" | "custom";
+
+const DATE_FILTER_LABEL: Record<DateFilter, string> = {
+  all: "All time",
+  today: "Today",
+  week: "This week",
+  month: "This month",
+  last_month: "Last month",
+  year: "This year",
+  custom: "Custom range",
+};
+
+/** [start, end) in the browser's local time — end is exclusive, so a plain
+ * `occurredAt >= start && occurredAt < end` check handles every case
+ * without off-by-one boundary bugs. Both null means no filtering (All time,
+ * or Custom range with neither date filled in yet). */
+function dateFilterRange(filter: DateFilter, customFrom: string, customTo: string): [Date | null, Date | null] {
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  switch (filter) {
+    case "today": {
+      const end = new Date(startOfToday);
+      end.setDate(end.getDate() + 1);
+      return [startOfToday, end];
+    }
+    case "week": {
+      const day = startOfToday.getDay();
+      const start = new Date(startOfToday);
+      start.setDate(start.getDate() - (day === 0 ? 6 : day - 1)); // Monday start
+      const end = new Date(start);
+      end.setDate(end.getDate() + 7);
+      return [start, end];
+    }
+    case "month": {
+      const start = new Date(now.getFullYear(), now.getMonth(), 1);
+      const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      return [start, end];
+    }
+    case "last_month": {
+      const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const end = new Date(now.getFullYear(), now.getMonth(), 1);
+      return [start, end];
+    }
+    case "year": {
+      const start = new Date(now.getFullYear(), 0, 1);
+      const end = new Date(now.getFullYear() + 1, 0, 1);
+      return [start, end];
+    }
+    case "custom": {
+      const start = customFrom ? new Date(customFrom) : null;
+      const end = customTo ? new Date(new Date(customTo).getTime() + 24 * 60 * 60 * 1000) : null;
+      return [start, end];
+    }
+    default:
+      return [null, null];
+  }
+}
+
 export function SalesView({ sales }: { sales: SaleListRow[] }) {
   const router = useRouter();
   const [q, setQ] = useState("");
   const [paymentStatus, setPaymentStatus] = useState("");
   const [status, setStatus] = useState("");
+  const [dateFilter, setDateFilter] = useState<DateFilter>("all");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+
+  const [rangeStart, rangeEnd] = useMemo(() => dateFilterRange(dateFilter, customFrom, customTo), [dateFilter, customFrom, customTo]);
 
   const filtered = useMemo(() => {
     const s = normalize(q);
     return sales.filter((sale) => {
       if (paymentStatus && sale.paymentStatus !== paymentStatus) return false;
       if (status && sale.status !== status) return false;
+      const occurred = new Date(sale.occurredAt);
+      if (rangeStart && occurred < rangeStart) return false;
+      if (rangeEnd && occurred >= rangeEnd) return false;
       if (!s) return true;
       const haystack = [sale.code, sale.customerName, sale.stringJobCode, sale.itemSummary].filter(Boolean).join(" ");
       return normalize(haystack).includes(s);
     });
-  }, [sales, q, paymentStatus, status]);
+  }, [sales, q, paymentStatus, status, rangeStart, rangeEnd]);
 
   const goTo = (id: string) => router.push(`/sales/${id}`);
 
@@ -54,7 +121,25 @@ export function SalesView({ sales }: { sales: SaleListRow[] }) {
           <option value="paid">Paid</option>
           <option value="refunded">Refunded</option>
         </select>
+        <select value={dateFilter} onChange={(e) => setDateFilter(e.target.value as DateFilter)} style={selectStyle()}>
+          {(Object.keys(DATE_FILTER_LABEL) as DateFilter[]).map((f) => (
+            <option key={f} value={f}>
+              {DATE_FILTER_LABEL[f]}
+            </option>
+          ))}
+        </select>
       </div>
+
+      {dateFilter === "custom" ? (
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          <Field label="From" style={{ width: 160, minWidth: 0 }}>
+            <Input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} style={{ width: "100%", minWidth: 0 }} />
+          </Field>
+          <Field label="To" style={{ width: 160, minWidth: 0 }}>
+            <Input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} style={{ width: "100%", minWidth: 0 }} />
+          </Field>
+        </div>
+      ) : null}
 
       {filtered.length === 0 ? (
         <Card>
