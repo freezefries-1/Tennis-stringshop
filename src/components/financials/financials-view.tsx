@@ -11,7 +11,7 @@ import { StatBlock } from "@/components/ds/stat-block";
 import { Icon } from "@/components/ds/icon";
 import { formatCents, formatCentsSigned, formatDate } from "@/lib/format";
 import { DATE_FILTER_LABEL, presetRange, detectPreset, toLocalDateInputValue, type DateFilterPreset } from "@/lib/date-filter";
-import type { FinancialSummary, ExpenseBreakdown, SalesSplit, MonthlyFinancials } from "@/lib/financials";
+import type { FinancialSummary, ExpenseBreakdown, SalesSplit, MonthlyTrendRow } from "@/lib/financials";
 
 const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -48,7 +48,7 @@ export function FinancialsView({
   summary: FinancialSummary;
   expenseBreakdown: ExpenseBreakdown;
   salesSplit: SalesSplit;
-  monthlyTrend: MonthlyFinancials[];
+  monthlyTrend: MonthlyTrendRow[];
   initialFrom: string;
   initialTo: string;
 }) {

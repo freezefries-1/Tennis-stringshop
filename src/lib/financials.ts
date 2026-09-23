@@ -1,6 +1,6 @@
 import { and, eq, gte, lt, sql } from "drizzle-orm";
 import { db } from "@/db/client";
-import { sales, saleItems } from "@/db/schema";
+import { sales, saleItems, expenses, otherIncome } from "@/db/schema";
 import { getSalesSummary, type SalesFilters } from "./sales";
 import { getExpenseSummary, type ExpenseCategoryAmount } from "./expenses";
 import { getOtherIncomeTotalCents } from "./other-income";
@@ -270,19 +270,139 @@ export async function getMonthlyFinancials(year: number, month1to12: number): Pr
   return { ...summary, year, month: month1to12, label: `${MONTH_NAMES[month1to12 - 1]} ${year}` };
 }
 
+export interface MonthlyTrendRow {
+  year: number;
+  month: number;
+  label: string;
+  netSalesRevenueCents: number;
+  cogsCents: number;
+  grossProfitCents: number;
+  operatingExpensesCents: number;
+  otherIncomeCents: number;
+  netProfitCents: number;
+}
+
 /** Oldest first, ending at (and including) the given year/month —
  * defaults to the current calendar month. Six months by default, matching
  * the brief's own Apr-Sep example; kept as a supporting view only, not
- * the full Phase 8 trend/analytics dashboard. */
-export async function getMonthlyTrend(monthsBack = 6, endYear?: number, endMonth?: number): Promise<MonthlyFinancials[]> {
+ * the full Phase 8 trend/analytics dashboard.
+ *
+ * Deliberately NOT built on getMonthlyFinancials/getFinancialSummary — that
+ * would be one call per month, and getFinancialSummary alone is ~10 DB
+ * round trips, so 6 months was ~60 near-simultaneous connections on top of
+ * whatever else the page was already doing (this is what made /financials
+ * slow again after it started defaulting to All time — see the dashboard
+ * timeout fix for the same class of bug). Instead this buckets every row in
+ * ONE query per underlying table (sales, sale_items, expenses,
+ * other_income) using an explicit SQL CASE over each month's own [start,
+ * end) boundary — the exact same boundary values monthRange() produces —
+ * rather than SQL-side date_trunc, so bucketing can never disagree with
+ * getFinancialSummary's own local-calendar-month semantics over a
+ * DB-session-timezone-dependent truncation. */
+export async function getMonthlyTrend(monthsBack = 6, endYear?: number, endMonth?: number): Promise<MonthlyTrendRow[]> {
   const now = new Date();
   const anchorYear = endYear ?? now.getFullYear();
   const anchorMonth = endMonth ?? now.getMonth() + 1;
 
-  const targets: { year: number; month: number }[] = [];
+  const targets: { year: number; month: number; start: Date; end: Date }[] = [];
   for (let i = monthsBack - 1; i >= 0; i--) {
     const d = new Date(anchorYear, anchorMonth - 1 - i, 1);
-    targets.push({ year: d.getFullYear(), month: d.getMonth() + 1 });
+    const [start, end] = monthRange(d.getFullYear(), d.getMonth() + 1);
+    targets.push({ year: d.getFullYear(), month: d.getMonth() + 1, start, end });
   }
-  return Promise.all(targets.map((t) => getMonthlyFinancials(t.year, t.month)));
+  const overallStart = targets[0].start;
+  const overallEnd = targets[targets.length - 1].end;
+  const overallStartStr = toDateStr(overallStart);
+  const overallEndStr = toDateStr(overallEnd);
+
+  // sales.occurredAt is timestamptz — bucketed against the exact JS Date
+  // boundaries above, same as every other sales date filter in this file.
+  // Serialized to ISO strings explicitly: unlike gte()/lt() (which know the
+  // column's type and convert automatically), a raw Date interpolated
+  // straight into a `sql` template isn't converted by postgres.js and fails
+  // at bind time — this is exactly what surfaced on first attempt here.
+  const salesBucket = sql.join(
+    targets.map((t, i) => sql`when ${sales.occurredAt} >= ${t.start.toISOString()} and ${sales.occurredAt} < ${t.end.toISOString()} then ${i}`),
+    sql` `,
+  );
+  // expenses.expenseDate / otherIncome.incomeDate are plain DATE columns —
+  // bucketed against calendar-day strings, same convention toDateStr()
+  // documents at the top of this file and getExpenseSummary/
+  // getOtherIncomeTotalCents already use.
+  const expenseBucket = sql.join(
+    targets.map((t, i) => sql`when ${expenses.expenseDate} >= ${toDateStr(t.start)} and ${expenses.expenseDate} < ${toDateStr(t.end)} then ${i}`),
+    sql` `,
+  );
+  const incomeBucket = sql.join(
+    targets.map((t, i) => sql`when ${otherIncome.incomeDate} >= ${toDateStr(t.start)} and ${otherIncome.incomeDate} < ${toDateStr(t.end)} then ${i}`),
+    sql` `,
+  );
+  const salesIdx = sql<number>`case ${salesBucket} end`;
+  const expenseIdx = sql<number>`case ${expenseBucket} end`;
+  const incomeIdx = sql<number>`case ${incomeBucket} end`;
+
+  // Grouped by ordinal position (`1`), not by repeating the CASE expression
+  // — Postgres validates a non-aggregated SELECT column against GROUP BY by
+  // comparing parse trees, and Drizzle re-serializes each occurrence of the
+  // same `sql` fragment with its own fresh bind parameters, which Postgres
+  // doesn't reliably recognise as "the same expression" even when the
+  // values are identical (this failed with exactly that error on first
+  // attempt for the expenses query). `GROUP BY 1` sidesteps the whole
+  // question — it's unambiguous regardless of how the expression itself is
+  // parameterized.
+  const [revenueRows, cogsRows, expenseRows, incomeRows] = await Promise.all([
+    db
+      .select({ idx: salesIdx, total: sql<string>`coalesce(sum(${sales.totalCents}), 0)` })
+      .from(sales)
+      .where(and(sql`${sales.status} != 'cancelled'`, gte(sales.occurredAt, overallStart), lt(sales.occurredAt, overallEnd)))
+      .groupBy(sql`1`),
+    db
+      .select({ idx: salesIdx, total: sql<string>`coalesce(sum(${saleItems.cogsAmountCents}), 0)` })
+      .from(saleItems)
+      .innerJoin(sales, eq(sales.id, saleItems.saleId))
+      .where(and(sql`${sales.status} != 'cancelled'`, gte(sales.occurredAt, overallStart), lt(sales.occurredAt, overallEnd)))
+      .groupBy(sql`1`),
+    db
+      .select({ idx: expenseIdx, total: sql<string>`coalesce(sum(${expenses.amountCents}), 0)` })
+      .from(expenses)
+      .where(and(eq(expenses.status, "recorded"), eq(expenses.treatment, "operating"), gte(expenses.expenseDate, overallStartStr), lt(expenses.expenseDate, overallEndStr)))
+      .groupBy(sql`1`),
+    db
+      .select({ idx: incomeIdx, total: sql<string>`coalesce(sum(${otherIncome.amountCents}), 0)` })
+      .from(otherIncome)
+      .where(and(eq(otherIncome.status, "recorded"), gte(otherIncome.incomeDate, overallStartStr), lt(otherIncome.incomeDate, overallEndStr)))
+      .groupBy(sql`1`),
+  ]);
+
+  // Number(r.idx) — the CASE branch's integer literal comes back from
+  // postgres.js as a string despite the sql<number> annotation (its
+  // resulting type OID is ambiguous to the driver), so comparing it
+  // against the plain JS number `i` below without coercion silently missed
+  // on every lookup — caught by cross-checking this against the old
+  // per-month implementation on local data before this was ever committed.
+  const toMap = (rows: { idx: number; total: string }[]) => new Map(rows.map((r) => [Number(r.idx), Number(r.total)]));
+  const revenueMap = toMap(revenueRows);
+  const cogsMap = toMap(cogsRows);
+  const expenseMap = toMap(expenseRows);
+  const incomeMap = toMap(incomeRows);
+
+  return targets.map((t, i) => {
+    const netSalesRevenueCents = revenueMap.get(i) ?? 0;
+    const cogsCents = cogsMap.get(i) ?? 0;
+    const grossProfitCents = netSalesRevenueCents - cogsCents;
+    const operatingExpensesCents = expenseMap.get(i) ?? 0;
+    const otherIncomeCents = incomeMap.get(i) ?? 0;
+    const netProfitCents = grossProfitCents - operatingExpensesCents + otherIncomeCents;
+    return {
+      year: t.year,
+      month: t.month,
+      label: `${MONTH_NAMES[t.month - 1]} ${t.year}`,
+      netSalesRevenueCents,
+      cogsCents,
+      grossProfitCents,
+      operatingExpensesCents,
+      otherIncomeCents,
+      netProfitCents,
+    };
+  });
 }
