@@ -12,6 +12,7 @@ import {
   createSupplier,
   receiveStock,
   recordManualAdjustment,
+  updateBatchCost,
   InsufficientStockError,
   exportStringProductsCsv,
   exportBatchesCsv,
@@ -19,6 +20,7 @@ import {
   type StringProductInput,
   type ReceiveStockInput,
   type ManualAdjustmentInput,
+  type UpdateBatchCostInput,
 } from "@/lib/string-inventory";
 
 export async function searchStringProductsAction(query: string) {
@@ -107,6 +109,13 @@ export async function recordManualAdjustmentAction(input: ManualAdjustmentInput,
   revalidatePath("/inventory");
   revalidatePath(`/inventory/products/${productId}`);
   return { status: "ok" };
+}
+
+export async function updateBatchCostAction(input: UpdateBatchCostInput, productId: string) {
+  await updateBatchCost(input);
+  revalidatePath("/inventory");
+  revalidatePath(`/inventory/products/${productId}`);
+  return { status: "ok" as const };
 }
 
 export async function exportProductsCsvAction() {

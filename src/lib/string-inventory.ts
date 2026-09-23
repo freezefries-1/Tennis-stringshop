@@ -500,6 +500,51 @@ export async function recordManualAdjustment(input: ManualAdjustmentInput): Prom
   });
 }
 
+export interface UpdateBatchCostInput {
+  batchId: string;
+  purchaseCostCents: number;
+  reason: string;
+}
+
+/** Corrects a batch's purchase cost after the fact (e.g. a typo at receipt)
+ * — cost-per-unit is recalculated from the batch's ORIGINAL quantity (it's
+ * a property of the whole purchase, not of whatever happens to remain
+ * today) and only affects allocations made from this point on. A job
+ * already completed against this batch keeps its own stored
+ * costPerUnitSnapshot/cogsAmountCents exactly as they were — historical
+ * COGS is never recalculated (brief §27). Logs a zero-quantity
+ * "correction" movement so the change stays visible in the batch's own
+ * history, same required-reason pattern as recordManualAdjustment. */
+export async function updateBatchCost(input: UpdateBatchCostInput): Promise<StringInventoryBatch> {
+  return db.transaction(async (tx) => {
+    const [batch] = await tx.select().from(stringInventoryBatches).where(eq(stringInventoryBatches.id, input.batchId)).for("update");
+    if (!batch) throw new Error("Batch not found");
+
+    const originalQuantity = Number(batch.originalQuantity);
+    const newCostPerUnitCents = originalQuantity > 0 ? input.purchaseCostCents / originalQuantity : 0;
+    const oldDollars = (batch.purchaseCostCents / 100).toFixed(2);
+    const newDollars = (input.purchaseCostCents / 100).toFixed(2);
+
+    const [updated] = await tx
+      .update(stringInventoryBatches)
+      .set({ purchaseCostCents: input.purchaseCostCents, costPerUnitCents: newCostPerUnitCents.toFixed(4) })
+      .where(eq(stringInventoryBatches.id, batch.id))
+      .returning();
+
+    await tx.insert(stringInventoryMovements).values({
+      stringProductId: batch.stringProductId,
+      batchId: batch.id,
+      movementType: "correction",
+      quantityChange: "0.00",
+      unit: batch.unit,
+      costPerUnitCentsSnapshot: newCostPerUnitCents.toFixed(4),
+      reason: `Purchase cost corrected: $${oldDollars} → $${newDollars} — ${input.reason.trim()}`,
+    });
+
+    return updated;
+  });
+}
+
 // -- FIFO allocation for string jobs ----------------------------------------
 
 export interface AllocationLine {
