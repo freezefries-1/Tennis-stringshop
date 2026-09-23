@@ -47,6 +47,13 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
 
   const paymentItems: SpecListItem[] = [
     { label: "Payment status", value: <Badge tone={SALE_PAYMENT_STATUS_TONE[sale.paymentStatus]} dot>{SALE_PAYMENT_STATUS_LABEL[sale.paymentStatus]}</Badge> },
+    ...(sale.returnedCents > 0
+      ? [
+          { label: "Original total", value: <span className="num">{formatCents(sale.totalCents)}</span> },
+          { label: "Returned", value: <span className="num" style={{ color: "var(--ink-500)" }}>−{formatCents(sale.returnedCents)}</span> },
+          { label: "Net total (after returns)", value: <span className="num">{formatCents(sale.netTotalCents)}</span> },
+        ]
+      : []),
     { label: "Paid", value: <span className="num">{formatCents(sale.paidCents)}</span> },
     { label: "Balance due", value: <span className="num">{formatCents(sale.balanceDueCents)}</span> },
   ];

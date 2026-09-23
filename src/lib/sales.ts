@@ -755,9 +755,12 @@ export interface SalesSummary {
   /** netRevenueCents - cogsCents, derived rather than summed separately so
    * it can never drift out of sync with the two numbers it's built from. */
   grossProfitCents: number;
-  /** Outstanding balance (totalCents - paid) across primary sales that
-   * aren't fully paid. Reversing entries are excluded — a refund is
-   * already a settled transaction, never itself "unpaid". */
+  /** Outstanding balance (totalCents, net of any returns against it, minus
+   * paid) across primary sales that aren't fully paid. Reversing entries
+   * are excluded as their OWN row — a refund is already a settled
+   * transaction, never itself "unpaid" — but a return's amount still
+   * reduces what its original sale is outstanding for (see getSale's
+   * netTotalCents for the same netting on a single sale). */
   unpaidCents: number;
   /** Cash actually collected (sum of sale_payments.amountCents) across
    * primary sales in range — distinct from netRevenueCents, which is
@@ -788,6 +791,21 @@ export async function getSalesSummary(filters: SalesFilters): Promise<SalesSumma
       .groupBy(sales.id, sales.totalCents),
   ]);
 
+  // A return posts as its own reversing Sale (negative totalCents) rather
+  // than editing the original — looked up separately (not date-filtered:
+  // "is this sale still outstanding right now" needs every return against
+  // it, whenever it happened) and merged in JS rather than joined
+  // alongside salePayments above, which would fan out and double-count.
+  const primarySaleIds = unpaidRows.map((r) => r.id);
+  const reversalRows = primarySaleIds.length
+    ? await db
+        .select({ reversesSaleId: sales.reversesSaleId, reversedCents: sql<string>`coalesce(sum(${sales.totalCents}), 0)` })
+        .from(sales)
+        .where(and(sql`${sales.status} != 'cancelled'`, inArray(sales.reversesSaleId, primarySaleIds)))
+        .groupBy(sales.reversesSaleId)
+    : [];
+  const reversedMap = new Map(reversalRows.map((r) => [r.reversesSaleId, Number(r.reversedCents)]));
+
   const netRevenueCents = Number(revenueRow?.total ?? 0);
   const cogsCents = Number(cogsRow?.cogs ?? 0);
   return {
@@ -795,7 +813,10 @@ export async function getSalesSummary(filters: SalesFilters): Promise<SalesSumma
     netRevenueCents,
     cogsCents,
     grossProfitCents: netRevenueCents - cogsCents,
-    unpaidCents: unpaidRows.reduce((sum, r) => sum + Math.max(0, r.totalCents - Number(r.paidCents)), 0),
+    unpaidCents: unpaidRows.reduce((sum, r) => {
+      const netTotalCents = r.totalCents + (reversedMap.get(r.id) ?? 0);
+      return sum + Math.max(0, netTotalCents - Number(r.paidCents));
+    }, 0),
     paymentsReceivedCents: unpaidRows.reduce((sum, r) => sum + Number(r.paidCents), 0),
   };
 }
@@ -809,20 +830,34 @@ export interface SaleDetail extends Sale {
   cogsCents: number;
   grossProfitCents: number;
   paidCents: number;
+  /** Total refunded against this sale — the sum of every reversing Sale's
+   * totalCents linked to it via reversesSaleId, as a positive number. A
+   * return never edits this sale's own totalCents (the snapshot rule), so
+   * this is how "how much has actually been returned" stays visible
+   * without digging through separate reversal rows. */
+  returnedCents: number;
+  /** totalCents - returnedCents — what this sale is really worth after
+   * returns, the figure balanceDueCents is computed against. */
+  netTotalCents: number;
   balanceDueCents: number;
 }
 
 export async function getSale(id: string): Promise<SaleDetail | null> {
   const [sale] = await db.select().from(sales).where(eq(sales.id, id)).limit(1);
   if (!sale) return null;
-  const [[customer], items, payments, [jobRow]] = await Promise.all([
+  const [[customer], items, payments, [jobRow], reversals] = await Promise.all([
     sale.customerId ? db.select().from(customers).where(eq(customers.id, sale.customerId)).limit(1) : Promise.resolve([null]),
     db.select().from(saleItems).where(eq(saleItems.saleId, id)).orderBy(saleItems.createdAt),
     listPaymentsForSale(id),
     sale.stringJobId ? db.select({ code: stringJobs.code }).from(stringJobs).where(eq(stringJobs.id, sale.stringJobId)).limit(1) : Promise.resolve([null]),
+    db.select({ totalCents: sales.totalCents }).from(sales).where(eq(sales.reversesSaleId, id)),
   ]);
   const cogsCents = items.reduce((sum, i) => sum + i.cogsAmountCents, 0);
   const paidCents = payments.reduce((sum, p) => sum + p.amountCents, 0);
+  // Reversing sales carry a negative totalCents (see returnSaleItem) — sum
+  // as a positive "returned" figure rather than exposing the sign flip.
+  const returnedCents = reversals.reduce((sum, r) => sum - r.totalCents, 0);
+  const netTotalCents = sale.totalCents - returnedCents;
   return {
     ...sale,
     customer: customer ?? null,
@@ -833,7 +868,9 @@ export async function getSale(id: string): Promise<SaleDetail | null> {
     cogsCents,
     grossProfitCents: sale.totalCents - cogsCents,
     paidCents,
-    balanceDueCents: Math.max(0, sale.totalCents - paidCents),
+    returnedCents,
+    netTotalCents,
+    balanceDueCents: Math.max(0, netTotalCents - paidCents),
   };
 }
 
@@ -956,7 +993,14 @@ export async function getDashboardSalesStats(): Promise<DashboardSalesStats> {
       .select({ id: sales.id, totalCents: sales.totalCents, paidCents: sql<string>`coalesce(sum(${salePayments.amountCents}), 0)` })
       .from(sales)
       .leftJoin(salePayments, eq(salePayments.saleId, sales.id))
-      .where(and(inArray(sales.paymentStatus, ["unpaid", "partially_paid"]), eq(sales.status, "completed")))
+      // Not just status='completed' — a partial return moves the ORIGINAL
+      // sale's own status to 'partially_refunded' (see returnSaleItem), and
+      // that sale can still have a real balance due on what wasn't
+      // returned. Excluding it here made it vanish from this stat entirely
+      // the moment any return touched it, instead of showing its correctly
+      // reduced balance — 'cancelled' is the only status that means
+      // nothing is actually owed, matching getSalesSummary's own filter.
+      .where(and(inArray(sales.paymentStatus, ["unpaid", "partially_paid"]), sql`${sales.status} != 'cancelled'`))
       .groupBy(sales.id, sales.totalCents),
   ]);
   const [monthItems] = await db
@@ -966,11 +1010,24 @@ export async function getDashboardSalesStats(): Promise<DashboardSalesStats> {
     .where(and(gte(sales.occurredAt, sql`date_trunc('month', now())`), sql`${sales.status} != 'cancelled'`));
   const monthRevenueCents = Number(month?.total ?? 0);
   const monthCogsCents = Number(monthItems?.cogs ?? 0);
+
+  // Same return-netting as getSalesSummary — a partial return against an
+  // unpaid sale reduces what it's actually outstanding for.
+  const unpaidSaleIds = unpaidRows.map((r) => r.id);
+  const reversalRows = unpaidSaleIds.length
+    ? await db
+        .select({ reversesSaleId: sales.reversesSaleId, reversedCents: sql<string>`coalesce(sum(${sales.totalCents}), 0)` })
+        .from(sales)
+        .where(and(sql`${sales.status} != 'cancelled'`, inArray(sales.reversesSaleId, unpaidSaleIds)))
+        .groupBy(sales.reversesSaleId)
+    : [];
+  const reversedMap = new Map(reversalRows.map((r) => [r.reversesSaleId, Number(r.reversedCents)]));
+
   return {
     todayRevenueCents: Number(today?.total ?? 0),
     monthRevenueCents,
     unpaidSalesCount: unpaidRows.length,
-    unpaidSalesCents: unpaidRows.reduce((sum, r) => sum + (r.totalCents - Number(r.paidCents)), 0),
+    unpaidSalesCents: unpaidRows.reduce((sum, r) => sum + Math.max(0, r.totalCents + (reversedMap.get(r.id) ?? 0) - Number(r.paidCents)), 0),
     monthGrossProfitCents: monthRevenueCents - monthCogsCents,
   };
 }

@@ -200,7 +200,8 @@ export function LinkedSalePanel({ jobId, sale }: { jobId: string; sale: SaleDeta
           {SALE_PAYMENT_STATUS_LABEL[sale.paymentStatus]}
         </Badge>
         <span className="row-s num">
-          {formatCents(sale.paidCents)} paid of {formatCents(sale.totalCents)}
+          {formatCents(sale.paidCents)} paid of {formatCents(sale.netTotalCents)}
+          {sale.returnedCents > 0 ? ` (${formatCents(sale.totalCents)} − ${formatCents(sale.returnedCents)} returned)` : ""}
         </span>
       </div>
 
