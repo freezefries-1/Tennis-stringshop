@@ -120,7 +120,7 @@ export function JobsView({ jobs, stats }: { jobs: JobListRow[]; stats: JobStats 
 
   return (
     <div className="rec-wrap">
-      <div className="g4" style={{ marginBottom: 4 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 16, marginBottom: 4 }}>
         <Card>
           <div className="lab">Active jobs</div>
           <div className="ph-t num" style={{ fontSize: 28, marginTop: 6 }}>{stats.activeJobs}</div>
@@ -136,6 +136,10 @@ export function JobsView({ jobs, stats }: { jobs: JobListRow[]; stats: JobStats 
         <Card>
           <div className="lab">Completed this month</div>
           <div className="ph-t num" style={{ fontSize: 28, marginTop: 6 }}>{stats.completedThisMonth}</div>
+        </Card>
+        <Card>
+          <div className="lab">Total revenue</div>
+          <div className="ph-t num" style={{ fontSize: 28, marginTop: 6 }}>{formatCents(stats.totalRevenueCents)}</div>
         </Card>
       </div>
 

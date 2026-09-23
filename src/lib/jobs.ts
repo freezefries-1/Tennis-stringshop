@@ -6,6 +6,7 @@ import { racketLabel } from "./racket-label";
 import { allocateForRole, InsufficientStockError, previewStock, reverseAllocationsForRole, type StockUnit } from "./string-inventory";
 import { isForeignKeyViolation } from "./db-errors";
 import { createJobSale, getSale, resyncJobSale, SaleLockedError, type SaleDetail } from "./sales";
+import { getSalesSplit } from "./financials";
 
 export type StringJob = typeof stringJobs.$inferSelect;
 export type StringJobString = typeof stringJobStrings.$inferSelect;
@@ -500,10 +501,18 @@ export interface JobStats {
   dueToday: number;
   readyForCollection: number;
   completedThisMonth: number;
+  /** All-time stringing revenue, net of returns — NOT a sum of
+   * stringJobs.finalPriceCents (that's just each job's quote/snapshot, and
+   * this codebase never sums it as revenue anywhere, per sales.ts's own
+   * file comment). Reuses getSalesSplit's "stringing" bucket
+   * (sale_items.itemType = 'string_job_service') so this figure can never
+   * drift from what /financials shows for the same all-time range — Sales
+   * stays the single source of truth for revenue. */
+  totalRevenueCents: number;
 }
 
 export async function getJobStats(): Promise<JobStats> {
-  const [[active], [dueToday], [ready], [completed]] = await Promise.all([
+  const [[active], [dueToday], [ready], [completed], salesSplit] = await Promise.all([
     db.select({ count: sql<number>`count(*)::int` }).from(stringJobs).where(inArray(stringJobs.status, ["received", "waiting", "in_progress"])),
     db.select({ count: sql<number>`count(*)::int` }).from(stringJobs).where(sql`${stringJobs.dueOn} = current_date and ${stringJobs.status} not in ('collected','cancelled')`),
     db.select({ count: sql<number>`count(*)::int` }).from(stringJobs).where(eq(stringJobs.status, "completed")),
@@ -511,12 +520,14 @@ export async function getJobStats(): Promise<JobStats> {
       .select({ count: sql<number>`count(*)::int` })
       .from(stringJobs)
       .where(sql`${stringJobs.completedAt} >= date_trunc('month', current_date) and ${stringJobs.completedAt} < date_trunc('month', current_date) + interval '1 month'`),
+    getSalesSplit({}),
   ]);
   return {
     activeJobs: active?.count ?? 0,
     dueToday: dueToday?.count ?? 0,
     readyForCollection: ready?.count ?? 0,
     completedThisMonth: completed?.count ?? 0,
+    totalRevenueCents: salesSplit.stringing.revenueCents,
   };
 }
 
