@@ -9,6 +9,7 @@ import { SpecList, type SpecListItem } from "@/components/ds/spec-list";
 import { formatCents, formatDate } from "@/lib/format";
 import { ChangeStatusControl } from "@/components/jobs/change-status-control";
 import { ChangePaymentStatusControl } from "@/components/jobs/change-payment-status-control";
+import { CancelJobButton } from "@/components/jobs/cancel-job-button";
 import { DeleteJobButton } from "@/components/jobs/delete-job-button";
 import { JOB_STATUS_LABEL, JOB_STATUS_TONE } from "@/components/jobs/job-status";
 
@@ -110,6 +111,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
               Edit job
             </Button>
           </Link>
+          <CancelJobButton jobId={job.id} status={job.status} />
           <DeleteJobButton jobId={job.id} />
         </div>
       </div>
@@ -119,7 +121,10 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
           <div className="lab" style={{ marginBottom: 6 }}>
             Job status
           </div>
-          <ChangeStatusControl jobId={job.id} status={job.status} />
+          {/* Keyed on status so a refresh from CancelJobButton (or any other
+              external status change) remounts this with the fresh value —
+              its own dropdown otherwise only tracks state it changes itself. */}
+          <ChangeStatusControl key={job.status} jobId={job.id} status={job.status} />
         </div>
         <div>
           <div className="lab" style={{ marginBottom: 6 }}>
