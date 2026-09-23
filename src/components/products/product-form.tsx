@@ -57,7 +57,11 @@ export function ProductForm({ mode, product, categories, suppliers: initialSuppl
       setSaving(false);
       return;
     }
-    router.push(`/products/${result.productId}`);
+    if (mode === "create" && trackInventory) {
+      router.push(`/products/receive?productId=${result.productId}`);
+    } else {
+      router.push(`/products/${result.productId}`);
+    }
   }
 
   return (
