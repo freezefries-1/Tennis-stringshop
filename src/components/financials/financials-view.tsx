@@ -133,6 +133,7 @@ export function FinancialsView({
           <StatBlock label="COGS" value={formatCents(summary.cogsCents)} icon="package" />
           <StatBlock label="Gross profit" value={formatCentsSigned(summary.grossProfitCents)} icon="bar-chart-3" unit={pctLabel(summary.grossMarginPct)} />
           <StatBlock label="Operating expenses" value={formatCents(summary.operatingExpensesCents)} icon="receipt" />
+          <StatBlock label="Other income" value={formatCents(summary.otherIncomeCents)} icon="wallet" />
           <StatBlock
             label="Net profit"
             value={<span style={{ color: summary.netProfitCents < 0 ? "var(--signal-danger)" : undefined }}>{formatCentsSigned(summary.netProfitCents)}</span>}
@@ -140,6 +141,15 @@ export function FinancialsView({
             icon="trending-up"
           />
         </div>
+        {summary.otherIncomeCents !== 0 ? (
+          <div className="row-s" style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--border-hairline)" }}>
+            Net profit = Gross profit − Operating expenses + Other income. Other income (
+            <Link href={`/other-income?${drillQuery}`} style={{ color: "var(--court-600)" }}>
+              {formatCents(summary.otherIncomeCents)} this period
+            </Link>
+            ) is money in that isn&rsquo;t Sales revenue — e.g. selling old equipment — kept separate so it&rsquo;s never confused with Sales.
+          </div>
+        ) : null}
         {summary.capitalExpensesCents > 0 ? (
           <div className="row-s" style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--border-hairline)" }}>
             Capital / equipment purchases in this period: <strong>{formatCents(summary.capitalExpensesCents)}</strong>. Shown for visibility only — not subtracted from Net Profit (no depreciation schedule yet).
@@ -288,6 +298,11 @@ export function FinancialsView({
         <Link href={`/expenses?${drillQuery}`}>
           <Button size="sm" variant="secondary">
             View expenses in this period
+          </Button>
+        </Link>
+        <Link href={`/other-income?${drillQuery}`}>
+          <Button size="sm" variant="secondary">
+            View other income in this period
           </Button>
         </Link>
       </div>

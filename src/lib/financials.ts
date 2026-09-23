@@ -3,6 +3,7 @@ import { db } from "@/db/client";
 import { sales, saleItems } from "@/db/schema";
 import { getSalesSummary, type SalesFilters } from "./sales";
 import { getExpenseSummary, type ExpenseCategoryAmount } from "./expenses";
+import { getOtherIncomeTotalCents } from "./other-income";
 
 // -- the P&L formulas (read this before editing) ----------------------------
 //
@@ -37,7 +38,15 @@ import { getExpenseSummary, type ExpenseCategoryAmount } from "./expenses";
 //      the inventory principle: a cost silently subtracted at the wrong
 //      time misstates profit just as much as a cost double-counted.
 //
-// NET PROFIT = GROSS PROFIT - OPERATING EXPENSES.
+// OTHER INCOME = sum(other_income.amountCents) where status='recorded',
+// incomeDate in range — money in that isn't Sales revenue (the motivating
+// case: selling a piece of capital equipment once it's replaced). Never
+// folded into Sales (would wrongly inflate the stringing/retail split) or
+// into Expenses as a negative number (would mislabel it as a cost
+// everywhere the UI/CSV export/audit trail say "expense") — see the file
+// comment in other-income.ts.
+//
+// NET PROFIT = GROSS PROFIT - OPERATING EXPENSES + OTHER INCOME.
 //
 // Neither margin is ever computed against a zero-revenue denominator —
 // both come back `null` (not 0, not NaN, not clamped) when
@@ -88,6 +97,10 @@ export interface FinancialSummary {
   /** Recorded (never voided) capital/equipment purchases in range — shown
    * for visibility, NOT subtracted from netProfitCents (see file comment). */
   capitalExpensesCents: number;
+  /** Money in that isn't Sales revenue (e.g. selling old equipment) — ADDED
+   * into netProfitCents, shown as its own line so it's never confused with
+   * Sales Revenue (see file comment / other-income.ts). */
+  otherIncomeCents: number;
   netProfitCents: number;
   netMarginPct: number | null;
   /** Outstanding balance on unpaid/partially-paid primary sales in range —
@@ -109,13 +122,14 @@ export async function getFinancialSummary(filters: FinancialsFilters): Promise<F
   const expenseDateFrom = filters.dateFrom ? toDateStr(filters.dateFrom) : null;
   const expenseDateTo = filters.dateTo ? toDateStr(filters.dateTo) : null;
 
-  const [salesSummary, expenseSummary, unknownCogsRevenueCents] = await Promise.all([
+  const [salesSummary, expenseSummary, otherIncomeCents, unknownCogsRevenueCents] = await Promise.all([
     getSalesSummary(salesFilters),
     getExpenseSummary({ dateFrom: expenseDateFrom, dateTo: expenseDateTo }),
+    getOtherIncomeTotalCents({ dateFrom: expenseDateFrom, dateTo: expenseDateTo }),
     getUnknownCogsRevenueCents(filters),
   ]);
 
-  const netProfitCents = salesSummary.grossProfitCents - expenseSummary.operatingTotalCents;
+  const netProfitCents = salesSummary.grossProfitCents - expenseSummary.operatingTotalCents + otherIncomeCents;
   const grossMarginPct = salesSummary.netRevenueCents !== 0 ? (salesSummary.grossProfitCents / salesSummary.netRevenueCents) * 100 : null;
   const netMarginPct = salesSummary.netRevenueCents !== 0 ? (netProfitCents / salesSummary.netRevenueCents) * 100 : null;
   const pctRevenueWithKnownCogs = salesSummary.netRevenueCents !== 0 ? ((salesSummary.netRevenueCents - unknownCogsRevenueCents) / salesSummary.netRevenueCents) * 100 : null;
@@ -128,6 +142,7 @@ export async function getFinancialSummary(filters: FinancialsFilters): Promise<F
     grossMarginPct,
     operatingExpensesCents: expenseSummary.operatingTotalCents,
     capitalExpensesCents: expenseSummary.capitalTotalCents,
+    otherIncomeCents,
     netProfitCents,
     netMarginPct,
     outstandingCents: salesSummary.unpaidCents,

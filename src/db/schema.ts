@@ -822,6 +822,58 @@ export const expenseAuditLog = pgTable("expense_audit_log", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+// -- other income (Phase 7 addendum) -----------------------------------------
+//
+// Money coming in that isn't Sales revenue — the clearest example is selling
+// a piece of capital equipment (e.g. an old stringing machine) once it's
+// replaced. Kept entirely separate from `sales` (which stays the single
+// source of truth for stringing/retail revenue — recording an equipment sale
+// there would wrongly inflate that split) and from `expenses` (a negative
+// "expense" would land on the right Net Profit number arithmetically, but
+// mislabels an income event as a cost everywhere the UI/CSV export/audit
+// trail say "expense"). Net Profit = Gross Profit - Operating Expenses +
+// Other Income (see src/lib/financials.ts).
+
+export const otherIncomeCodeSeq = pgSequence("other_income_code_seq", { startWith: 1, minValue: 1 });
+
+// Never "deleted", same append-only reasoning as expenseStatusEnum above.
+export const otherIncomeStatusEnum = pgEnum("other_income_status", ["recorded", "voided"]);
+
+export const otherIncome = pgTable("other_income", {
+  id: id(),
+  incomeNumber: text("income_number")
+    .notNull()
+    .unique()
+    .default(sql`'I' || lpad(nextval('other_income_code_seq')::text, 4, '0')`), // I0001
+  incomeDate: date("income_date").notNull(),
+  description: text("description").notNull(),
+  // Free text, not a managed category table like expenseCategories — this is
+  // expected to be a handful of entries a year (an equipment sale, an
+  // occasional rebate), not a growing chart of accounts, so a lightweight
+  // text field with autocomplete from prior entries (mirroring Expenses'
+  // vendor field) is proportionate rather than a whole category CRUD UI.
+  category: text("category").notNull(),
+  source: text("source"), // who paid / bought it — analogous to Expenses' vendor
+  amountCents: integer("amount_cents").notNull(),
+  paymentMethod: text("payment_method"),
+  referenceNumber: text("reference_number"),
+  notes: text("notes"),
+  status: otherIncomeStatusEnum("status").notNull().default("recorded"),
+  voidedAt: timestamp("voided_at", { withTimezone: true }),
+  voidReason: text("void_reason"),
+  ...timestamps,
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const otherIncomeAuditLog = pgTable("other_income_audit_log", {
+  id: id(),
+  otherIncomeId: uuid("other_income_id").notNull().references(() => otherIncome.id, { onDelete: "cascade" }),
+  action: text("action").notNull(), // "created" | "updated" | "voided"
+  oldValues: jsonb("old_values"),
+  newValues: jsonb("new_values"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 // Business name, currency, default labour charge, default string usage,
 // payment methods, expense/product categories, job statuses, low-stock
 // thresholds — one JSON document per settings key.

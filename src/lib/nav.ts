@@ -27,6 +27,7 @@ export const NAV: NavItem[] = [
   { value: "catalogue", label: "Racket database", icon: "library" },
   { section: "Money" },
   { value: "expenses", label: "Expenses", icon: "receipt" },
+  { value: "other-income", label: "Other income", icon: "wallet" },
   { value: "financials", label: "Financials", icon: "trending-up" },
   { value: "reports", label: "Reports", icon: "bar-chart-3" },
 ];
@@ -108,6 +109,12 @@ export const PAGES: Record<string, PageMeta> = {
     label: "Money",
     action: "New expense",
     actionHref: "/expenses/new",
+  },
+  "other-income": {
+    title: "Other income",
+    label: "Money",
+    action: "Add income",
+    actionHref: "/other-income/new",
   },
   financials: {
     title: "Financials",
