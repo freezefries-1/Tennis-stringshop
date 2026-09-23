@@ -16,7 +16,7 @@ const TITLE: Record<AdjustmentMode, string> = {
   manual_deduct: "Deduct stock",
   wastage: "Record wastage",
   correction: "Stock correction",
-  edit_cost: "Edit purchase cost",
+  edit_cost: "Edit received quantity / cost",
 };
 const REASON_PLACEHOLDER: Record<AdjustmentMode, string> = {
   manual_add: "e.g. found extra stock on a re-count",
@@ -39,13 +39,19 @@ export function AdjustStockPanel({ productId, batches }: { productId: string; ba
   const [batchId, setBatchId] = useState(batches[0]?.id ?? "");
   const [amount, setAmount] = useState("");
   const [cost, setCost] = useState("");
+  const [receivedQty, setReceivedQty] = useState("");
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const batchById = (id: string) => batches.find((x) => x.id === id);
   const costForBatch = (id: string) => {
-    const b = batches.find((x) => x.id === id);
+    const b = batchById(id);
     return b ? (b.purchaseCostCents / 100).toFixed(2) : "";
+  };
+  const originalQtyForBatch = (id: string) => {
+    const b = batchById(id);
+    return b ? String(b.originalQuantity) : "";
   };
 
   const openPanel = (mode: AdjustmentMode) => {
@@ -55,26 +61,37 @@ export function AdjustStockPanel({ productId, batches }: { productId: string; ba
     setError(null);
     const id = batchId || batches[0]?.id || "";
     if (!batchId && batches[0]) setBatchId(batches[0].id);
-    if (mode === "edit_cost") setCost(costForBatch(id));
+    if (mode === "edit_cost") {
+      setCost(costForBatch(id));
+      setReceivedQty(originalQtyForBatch(id));
+    }
   };
 
   function selectBatch(id: string) {
     setBatchId(id);
-    if (open === "edit_cost") setCost(costForBatch(id));
+    if (open === "edit_cost") {
+      setCost(costForBatch(id));
+      setReceivedQty(originalQtyForBatch(id));
+    }
   }
 
   async function submit() {
     if (!open) return;
     if (open === "edit_cost") {
       const cents = Math.round(Number(cost) * 100);
-      if (!batchId || !cost.trim() || Number.isNaN(cents) || cents < 0 || !reason.trim()) {
-        setError("Batch, purchase cost and reason are all required.");
+      const qty = Math.round(Number(receivedQty));
+      if (!batchId || !cost.trim() || Number.isNaN(cents) || cents < 0 || !receivedQty.trim() || Number.isNaN(qty) || qty <= 0 || !reason.trim()) {
+        setError("Batch, received quantity, purchase cost and reason are all required.");
         return;
       }
       setSaving(true);
       setError(null);
-      await updateProductBatchCostAction({ batchId, purchaseCostCents: cents, reason }, productId);
+      const result = await updateProductBatchCostAction({ batchId, purchaseCostCents: cents, originalQuantity: qty, reason }, productId);
       setSaving(false);
+      if (result.status === "invalid_quantity") {
+        setError(`That would leave ${result.impliedRemaining} units remaining, which isn't possible — some have already been sold or used from this batch. Check the corrected quantity.`);
+        return;
+      }
       setOpen(null);
       router.refresh();
       return;
@@ -115,7 +132,7 @@ export function AdjustStockPanel({ productId, batches }: { productId: string; ba
           Stock correction
         </Button>
         <Button size="sm" variant="secondary" onClick={() => openPanel("edit_cost")}>
-          Edit purchase cost
+          Edit received quantity / cost
         </Button>
       </div>
 
@@ -137,9 +154,14 @@ export function AdjustStockPanel({ productId, batches }: { productId: string; ba
             </select>
           </Field>
           {open === "edit_cost" ? (
-            <Field label="Purchase cost" htmlFor="adjCost">
-              <Input id="adjCost" type="number" inputMode="decimal" min="0" step="0.01" value={cost} onChange={(e) => setCost(e.target.value)} suffix="SGD" style={{ width: "100%" }} />
-            </Field>
+            <>
+              <Field label="Original quantity received" hint="Corrects the receipt itself — different from Stock correction, which only adjusts what's currently on hand" htmlFor="adjQty">
+                <Input id="adjQty" type="number" inputMode="numeric" min="1" step="1" value={receivedQty} onChange={(e) => setReceivedQty(e.target.value)} suffix="units" style={{ width: "100%" }} />
+              </Field>
+              <Field label="Purchase cost" hint="Total paid for this batch — cost per unit recalculates from this ÷ the quantity above" htmlFor="adjCost">
+                <Input id="adjCost" type="number" inputMode="decimal" min="0" step="0.01" value={cost} onChange={(e) => setCost(e.target.value)} suffix="SGD" style={{ width: "100%" }} />
+              </Field>
+            </>
           ) : (
             <Field label={open === "correction" ? "Correct remaining stock to" : "Amount"} htmlFor="adjAmount">
               <Input id="adjAmount" type="number" inputMode="numeric" min="0" step="1" value={amount} onChange={(e) => setAmount(e.target.value)} suffix="units" style={{ width: "100%" }} />

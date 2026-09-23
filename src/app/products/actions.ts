@@ -9,6 +9,7 @@ import {
   ensureDefaultCategories,
   findDuplicateProduct,
   InsufficientStockError,
+  BatchQuantityCorrectionError,
   listProductCategories,
   listProducts,
   receiveProductStock,
@@ -115,7 +116,14 @@ export async function recordManualAdjustmentAction(input: ManualAdjustmentInput,
 }
 
 export async function updateProductBatchCostAction(input: UpdateProductBatchCostInput, productId: string) {
-  await updateProductBatchCost(input);
+  try {
+    await updateProductBatchCost(input);
+  } catch (err) {
+    if (err instanceof BatchQuantityCorrectionError) {
+      return { status: "invalid_quantity" as const, impliedRemaining: err.impliedRemaining };
+    }
+    throw err;
+  }
   revalidatePath("/products");
   revalidatePath(`/products/${productId}`);
   return { status: "ok" as const };
