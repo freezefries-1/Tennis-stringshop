@@ -7,6 +7,7 @@ import { Input } from "@/components/ds/input";
 import { Card } from "@/components/ds/card";
 import { Badge } from "@/components/ds/badge";
 import { Button } from "@/components/ds/button";
+import { StatBlock } from "@/components/ds/stat-block";
 import { formatCents } from "@/lib/format";
 import type { ProductCategory, ProductRow } from "@/lib/products";
 
@@ -44,10 +45,28 @@ export function ProductsView({ products, categories }: { products: ProductRow[];
     });
   }, [products, q, categoryId, status, showArchived]);
 
+  // At cost — available units × weighted average cost per unit, summed
+  // across whatever's currently filtered/visible. Untracked products don't
+  // carry a countable stock value, so they're excluded rather than shown
+  // as $0.
+  const totalValueCents = useMemo(
+    () => filtered.reduce((sum, p) => (p.trackInventory && p.avgCostPerUnitCents != null ? sum + Math.round(p.available * p.avgCostPerUnitCents) : sum), 0),
+    [filtered],
+  );
+
   const goTo = (id: string) => router.push(`/products/${id}`);
 
   return (
     <div className="rec-wrap">
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
+        <Card>
+          <StatBlock label="Total inventory value" value={formatCents(totalValueCents)} icon="banknote" />
+          <div className="row-s" style={{ marginTop: 12 }}>
+            At cost, across {filtered.filter((p) => p.trackInventory).length} tracked product{filtered.filter((p) => p.trackInventory).length === 1 ? "" : "s"}
+          </div>
+        </Card>
+      </div>
+
       <div className="rec-tools">
         <Input iconLeft="search" placeholder="Search product, brand, variant, SKU or barcode" value={q} onChange={(e) => setQ(e.target.value)} style={{ width: "100%" }} />
         <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} style={selectStyle()}>

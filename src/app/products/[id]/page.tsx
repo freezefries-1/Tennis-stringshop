@@ -50,6 +50,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
     ? [
         { label: "Available", value: <span className="num">{product.available}</span> },
         { label: "Active batches", value: product.activeBatches },
+        { label: "Stock value (at cost)", value: product.avgCostPerUnitCents != null ? <span className="num">{formatCents(Math.round(product.available * product.avgCostPerUnitCents))}</span> : "—" },
         { label: "Low stock threshold", value: `${product.effectiveThreshold} units${product.lowStockThreshold == null ? " (default)" : ""}` },
         { label: "Status", value: <Badge tone={STATUS_TONE[product.status]} dot>{STATUS_LABEL[product.status]}</Badge> },
       ]
