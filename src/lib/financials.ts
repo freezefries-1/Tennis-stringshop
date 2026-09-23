@@ -132,16 +132,29 @@ export interface FinancialSummary {
   pctRevenueWithKnownCogs: number | null;
 }
 
+// TEMPORARY — production timeout diagnosis (remove once the live 504 is
+// confirmed resolved). getFinancialSummary is the Dashboard's heaviest call
+// (~10 DB round trips across these 4 sub-calls) and the one that stalled
+// out past Vercel's function timeout in production while every other
+// top-level Dashboard query completed — this pins down which of the 4
+// sub-calls is actually the slow one instead of guessing.
+async function timedSub<T>(name: string, fn: () => Promise<T>): Promise<T> {
+  const start = Date.now();
+  const result = await fn();
+  console.log(`[financials timing] ${name}: ${Date.now() - start}ms`);
+  return result;
+}
+
 export async function getFinancialSummary(filters: FinancialsFilters): Promise<FinancialSummary> {
   const salesFilters: SalesFilters = { dateFrom: filters.dateFrom, dateTo: filters.dateTo };
   const expenseDateFrom = filters.dateFrom ? toDateStr(filters.dateFrom) : null;
   const expenseDateTo = filters.dateTo ? toDateStr(filters.dateTo) : null;
 
   const [salesSummary, expenseSummary, otherIncomeCents, unknownCogsRevenueCents] = await Promise.all([
-    getSalesSummary(salesFilters),
-    getExpenseSummary({ dateFrom: expenseDateFrom, dateTo: expenseDateTo }),
-    getOtherIncomeTotalCents({ dateFrom: expenseDateFrom, dateTo: expenseDateTo }),
-    getUnknownCogsRevenueCents(filters),
+    timedSub("getSalesSummary", () => getSalesSummary(salesFilters)),
+    timedSub("getExpenseSummary", () => getExpenseSummary({ dateFrom: expenseDateFrom, dateTo: expenseDateTo })),
+    timedSub("getOtherIncomeTotalCents", () => getOtherIncomeTotalCents({ dateFrom: expenseDateFrom, dateTo: expenseDateTo })),
+    timedSub("getUnknownCogsRevenueCents", () => getUnknownCogsRevenueCents(filters)),
   ]);
 
   const netProfitCents = salesSummary.grossProfitCents - expenseSummary.operatingTotalCents + otherIncomeCents;

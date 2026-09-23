@@ -4,6 +4,7 @@ import { listLowStockProducts as listLowStockRetailProducts } from "@/lib/produc
 import { getDashboardSalesStats, listRecentSales } from "@/lib/sales";
 import { getFinancialSummary, monthRange } from "@/lib/financials";
 import { listRecentExpenses } from "@/lib/expenses";
+import { getInventoryDefaults } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -19,10 +20,19 @@ async function timed<T>(name: string, fn: () => Promise<T>): Promise<T> {
   return result;
 }
 
-export default async function DashboardPage() {
+// Pulled out of the component body — React's purity rule flags Date.now()
+// called directly during render, even in an async Server Component, so the
+// timed data-fetching lives in its own plain async function instead.
+async function loadDashboardData() {
   const pageStart = Date.now();
   const now = new Date();
   const [monthFrom, monthTo] = monthRange(now.getFullYear(), now.getMonth() + 1);
+
+  // Fired once, alongside everything else below (not awaited yet) — both
+  // low-stock queries await this SAME promise instead of each calling
+  // getInventoryDefaults() separately, so it's one DB round trip instead of
+  // two, without adding a serial hop in front of the rest of the page.
+  const defaultsPromise = getInventoryDefaults();
 
   // Year-to-date was dropped from here (brief §46 only asks for THIS
   // month's figures) — getFinancialSummary alone is ~10 queries, so a
@@ -31,8 +41,8 @@ export default async function DashboardPage() {
   // Vercel's function timeout in production. Full YTD is still one click
   // away on /financials (set the range to "This year").
   const [lowStockStrings, lowStockRetail, recentMovements, salesStats, recentSales, monthFinancials, recentExpenses] = await Promise.all([
-    timed("listLowStockStringProducts", () => listLowStockStringProducts()),
-    timed("listLowStockRetailProducts", () => listLowStockRetailProducts()),
+    timed("listLowStockStringProducts", async () => listLowStockStringProducts(8, await defaultsPromise)),
+    timed("listLowStockRetailProducts", async () => listLowStockRetailProducts(8, await defaultsPromise)),
     timed("listRecentMovements", () => listRecentMovements()),
     timed("getDashboardSalesStats", () => getDashboardSalesStats()),
     timed("listRecentSales", () => listRecentSales()),
@@ -46,5 +56,10 @@ export default async function DashboardPage() {
     ...lowStockRetail.map((p) => ({ kind: "product" as const, productId: p.productId, label: p.label, available: String(p.available), unit: "unit", threshold: String(p.threshold), status: p.status })),
   ].sort((a, b) => Number(a.available) - Number(b.available));
 
+  return { lowStock, recentMovements, salesStats, recentSales, monthFinancials, recentExpenses };
+}
+
+export default async function DashboardPage() {
+  const { lowStock, recentMovements, salesStats, recentSales, monthFinancials, recentExpenses } = await loadDashboardData();
   return <Dashboard lowStock={lowStock} recentMovements={recentMovements} salesStats={salesStats} recentSales={recentSales} monthFinancials={monthFinancials} recentExpenses={recentExpenses} />;
 }

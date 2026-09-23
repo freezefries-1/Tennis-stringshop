@@ -9,7 +9,7 @@ import {
   suppliers,
   type stringStockUnitEnum,
 } from "@/db/schema";
-import { getInventoryDefaults } from "./settings";
+import { getInventoryDefaults, type InventoryDefaults } from "./settings";
 import { isForeignKeyViolation } from "./db-errors";
 
 export type StringProduct = typeof stringProducts.$inferSelect;
@@ -279,9 +279,9 @@ export interface LowStockRow {
  * for the /inventory list page, which genuinely needs every row for
  * client-side search/filter at this app's scale; this one only ever needs
  * a handful of rows. */
-export async function listLowStockProducts(limit = 8): Promise<LowStockRow[]> {
-  const defaults = await getInventoryDefaults();
-  const defaultThreshold = sql`case when ${stringProducts.trackingUnit} = 'set' then ${defaults.lowStockThresholdSets}::numeric else ${defaults.lowStockThresholdM}::numeric end`;
+export async function listLowStockProducts(limit = 8, defaults?: InventoryDefaults): Promise<LowStockRow[]> {
+  const d = defaults ?? (await getInventoryDefaults());
+  const defaultThreshold = sql`case when ${stringProducts.trackingUnit} = 'set' then ${d.lowStockThresholdSets}::numeric else ${d.lowStockThresholdM}::numeric end`;
   const rows = await db
     .select({
       id: stringProducts.id,

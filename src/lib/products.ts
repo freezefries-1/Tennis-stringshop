@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { productCategories, productInventoryBatches, productInventoryMovements, products, saleItemInventoryAllocations, suppliers } from "@/db/schema";
-import { getInventoryDefaults } from "./settings";
+import { getInventoryDefaults, type InventoryDefaults } from "./settings";
 import { isForeignKeyViolation } from "./db-errors";
 
 // PRODUCT_VS_STRING_PRODUCT — referenced from src/db/schema.ts's comment on
@@ -319,22 +319,22 @@ export interface LowStockRow {
  * and filtering in JS. listProducts stays as-is for the /products list
  * page, which genuinely needs every row for client-side search/filter at
  * this app's scale; this one only ever needs a handful of rows. */
-export async function listLowStockProducts(limit = 8): Promise<LowStockRow[]> {
-  const defaults = await getInventoryDefaults();
+export async function listLowStockProducts(limit = 8, defaults?: InventoryDefaults): Promise<LowStockRow[]> {
+  const d = defaults ?? (await getInventoryDefaults());
   const rows = await db
     .select({
       id: products.id,
       brand: products.brand,
       name: products.name,
       variant: products.variant,
-      threshold: sql<number>`coalesce(${products.lowStockThreshold}, ${defaults.lowStockThresholdUnits})::int`,
+      threshold: sql<number>`coalesce(${products.lowStockThreshold}, ${d.lowStockThresholdUnits})::int`,
       available: sql<number>`coalesce(sum(${productInventoryBatches.remainingQuantity}) filter (where ${productInventoryBatches.remainingQuantity} > 0), 0)::int`,
     })
     .from(products)
     .leftJoin(productInventoryBatches, eq(productInventoryBatches.productId, products.id))
     .where(and(isNull(products.archivedAt), eq(products.trackInventory, true)))
     .groupBy(products.id, products.brand, products.name, products.variant, products.lowStockThreshold)
-    .having(sql`coalesce(sum(${productInventoryBatches.remainingQuantity}) filter (where ${productInventoryBatches.remainingQuantity} > 0), 0) <= coalesce(${products.lowStockThreshold}, ${defaults.lowStockThresholdUnits})`)
+    .having(sql`coalesce(sum(${productInventoryBatches.remainingQuantity}) filter (where ${productInventoryBatches.remainingQuantity} > 0), 0) <= coalesce(${products.lowStockThreshold}, ${d.lowStockThresholdUnits})`)
     .orderBy(sql`coalesce(sum(${productInventoryBatches.remainingQuantity}) filter (where ${productInventoryBatches.remainingQuantity} > 0), 0) asc`, asc(products.name), asc(products.brand))
     .limit(limit);
 
