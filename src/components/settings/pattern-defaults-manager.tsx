@@ -26,7 +26,7 @@ function toDraft(row?: StringPatternDefault): RowDraft {
 
 function DraftRow({ draft, onChange, patternDisabled }: { draft: RowDraft; onChange: (patch: Partial<RowDraft>) => void; patternDisabled?: boolean }) {
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 100px 100px 100px", gap: 8, alignItems: "end" }}>
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 100px 100px 100px", gap: 8, alignItems: "start" }}>
       <Field label="Pattern" hint={patternDisabled ? undefined : "e.g. 16x19"}>
         <Input value={draft.pattern} onChange={(e) => onChange({ pattern: e.target.value })} placeholder="16x19" disabled={patternDisabled} style={{ width: "100%" }} />
       </Field>
