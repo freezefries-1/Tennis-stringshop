@@ -19,6 +19,16 @@ export function Cart({ lines, onChange }: { lines: CartLine[]; onChange: (lines:
   const remove = (key: string) => onChange(lines.filter((l) => l.key !== key));
   const step = (l: CartLine) => (l.unit === "m" ? 0.1 : 1);
 
+  // Switching "sell as" resets quantity to 1 (of whichever unit is now
+  // selected) and swaps in that unit's own default price — reel price for
+  // reel mode, the remembered per-metre default for metre mode — since a
+  // quantity/price that made sense in one unit rarely does in the other.
+  const setSellUnit = (l: CartLine, mode: "m" | "reel") => {
+    if (mode === l.unit) return;
+    const price = mode === "reel" ? (l.reelSellingPriceCents ?? Math.round((l.meterPriceCentsDefault ?? l.unitPriceCents) * (l.reelLengthM ?? 1))) : (l.meterPriceCentsDefault ?? 0);
+    update(l.key, { unit: mode, quantity: 1, unitPriceCents: price, standardPriceCentsSnapshot: price });
+  };
+
   // Unit price/discount are stored as cents and displayed via .toFixed(2),
   // which reformats on every keystroke and fights whatever's mid-typed (e.g.
   // typing "12.50" snaps to "12.00" after the first digit, then every further
@@ -46,8 +56,18 @@ export function Cart({ lines, onChange }: { lines: CartLine[]; onChange: (lines:
               <Icon name="trash" size={16} />
             </button>
           </div>
+          {l.reelLengthM != null ? (
+            <div className="tabs-lite" role="tablist" style={{ alignSelf: "flex-start" }}>
+              <button type="button" className={"tab-lite" + (l.unit !== "reel" ? " on" : "")} onClick={() => setSellUnit(l, "m")}>
+                Sell by the metre
+              </button>
+              <button type="button" className={"tab-lite" + (l.unit === "reel" ? " on" : "")} onClick={() => setSellUnit(l, "reel")}>
+                Sell whole reel ({l.reelLengthM}m)
+              </button>
+            </div>
+          ) : null}
           <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
-            <Field label="Qty" style={{ width: 84, minWidth: 0 }}>
+            <Field label={l.unit === "reel" ? "Reels" : "Qty"} style={{ width: 84, minWidth: 0 }}>
               <Input type="number" inputMode="decimal" min="0" step={step(l)} value={String(l.quantity)} onChange={(e) => update(l.key, { quantity: Number(e.target.value) || 0 })} style={{ width: "100%", minWidth: 0 }} />
             </Field>
             <Field label="Unit price" style={{ width: 100, minWidth: 0 }} hint={l.unitPriceCents !== l.standardPriceCentsSnapshot ? `Standard ${formatCents(l.standardPriceCentsSnapshot)}` : undefined}>

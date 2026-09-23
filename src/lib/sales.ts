@@ -77,6 +77,15 @@ export interface CartLineInput {
   discountCents?: number;
   /** Custom items only — COGS defaults to 0 (brief §17) unless given. */
   manualCogsCents?: number | null;
+  /** string_product lines only — when set, this is how much to deduct
+   * from string inventory (in the product's native tracking unit),
+   * overriding `quantity` for that purpose. Lets a line's `quantity` mean
+   * "reels sold" (for pricing/receipt) while inventory is still deducted
+   * in the metres a reel actually contains — e.g. quantity=1 reel,
+   * inventoryQuantityOverride=200 (m) for a 200m reel. Omitted/null means
+   * `quantity` itself is already in the native unit (the ordinary
+   * cut-to-length case). */
+  inventoryQuantityOverride?: number | null;
 }
 
 export interface CreateSaleInput {
@@ -114,9 +123,10 @@ async function previewLineStock(line: CartLineInput, index: number): Promise<Sal
   if (line.itemType === "string_product" && line.stringProductId) {
     const product = await getStringProduct(line.stringProductId);
     if (!product) return null;
-    const { sufficient, available } = await previewStringStock(line.stringProductId, line.quantity);
+    const neededQty = line.inventoryQuantityOverride ?? line.quantity;
+    const { sufficient, available } = await previewStringStock(line.stringProductId, neededQty);
     if (sufficient) return null;
-    return { itemIndex: index, label: [product.brand, product.name, product.gauge ? `${product.gauge}mm` : null, product.colour].filter(Boolean).join(" "), neededQty: line.quantity, availableQty: available, unit: product.trackingUnit };
+    return { itemIndex: index, label: [product.brand, product.name, product.gauge ? `${product.gauge}mm` : null, product.colour].filter(Boolean).join(" "), neededQty, availableQty: available, unit: product.trackingUnit };
   }
   return null;
 }
@@ -201,23 +211,32 @@ export async function createSale(input: CreateSaleInput): Promise<CreateSaleResu
         } else if (line.itemType === "string_product" && line.stringProductId) {
           const product = await getStringProduct(line.stringProductId);
           if (!product) throw new Error("String product not found");
+          const baseDescription = line.descriptionOverride?.trim() || [product.brand, product.name, product.gauge ? `${product.gauge}mm` : null, product.colour].filter(Boolean).join(" ");
           const [item] = await tx
             .insert(saleItems)
             .values({
               saleId: sale.id,
               itemType: "string_product",
               stringProductId: product.id,
-              descriptionSnapshot: line.descriptionOverride?.trim() || [product.brand, product.name, product.gauge ? `${product.gauge}mm` : null, product.colour].filter(Boolean).join(" "),
+              descriptionSnapshot: baseDescription + (line.inventoryQuantityOverride != null ? " (reel)" : ""),
               skuSnapshot: product.sku,
               quantity: String(line.quantity),
-              standardPriceCentsSnapshot: product.defaultSellingPriceCents ?? line.unitPriceCents,
+              standardPriceCentsSnapshot: (line.inventoryQuantityOverride != null ? product.reelSellingPriceCents : product.defaultSellingPriceCents) ?? line.unitPriceCents,
               unitPriceCents: line.unitPriceCents,
               discountCents: line.discountCents ?? 0,
               lineTotalCents,
               grossProfitCents: lineTotalCents,
             })
             .returning();
-          const { cogsCents } = await allocateStringForSale({ tx, stringProductId: product.id, saleId: sale.id, saleItemId: item.id, quantityNeeded: line.quantity, unit: product.trackingUnit, allowOverride: !!input.allowStockOverride });
+          const { cogsCents } = await allocateStringForSale({
+            tx,
+            stringProductId: product.id,
+            saleId: sale.id,
+            saleItemId: item.id,
+            quantityNeeded: line.inventoryQuantityOverride ?? line.quantity,
+            unit: product.trackingUnit,
+            allowOverride: !!input.allowStockOverride,
+          });
           await tx.update(saleItems).set({ cogsAmountCents: cogsCents, grossProfitCents: lineTotalCents - cogsCents }).where(eq(saleItems.id, item.id));
         } else {
           const cogsCents = line.manualCogsCents ?? 0;

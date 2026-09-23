@@ -28,6 +28,11 @@ export interface PosSearchResult {
   priceCents: number | null;
   available: number | string;
   unit: string;
+  /** Set only for an 'm'-tracked string product that also has a reel
+   * length/price configured — lets the POS cart offer "sell as: metres /
+   * whole reel(s)" for this line. */
+  reelLengthM?: number | null;
+  reelSellingPriceCents?: number | null;
 }
 
 /** One merged search across both catalogues (brief §15) — a general retail
@@ -60,6 +65,8 @@ export async function searchPosItems(query: string): Promise<PosSearchResult[]> 
       priceCents: p.defaultSellingPriceCents,
       available: p.available,
       unit: p.trackingUnit,
+      reelLengthM: p.reelLengthM != null ? Number(p.reelLengthM) : null,
+      reelSellingPriceCents: p.reelSellingPriceCents,
     }));
   return [...productResults, ...stringResults];
 }

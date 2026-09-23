@@ -78,6 +78,13 @@
       "when": 1790134846489,
       "tag": "0010_phase6_string_retail_sale",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790152109252,
+      "tag": "0011_string_reel_selling",
+      "breakpoints": true
     }
   ]
 }

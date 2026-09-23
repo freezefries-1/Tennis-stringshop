@@ -40,6 +40,8 @@ export interface StringProductInput {
   sku?: string | null;
   trackingUnit: StockUnit;
   defaultSellingPriceCents?: number | null;
+  reelLengthM?: string | null;
+  reelSellingPriceCents?: number | null;
   lowStockThreshold?: string | null;
   notes?: string | null;
 }
@@ -54,6 +56,8 @@ function cleanProductInput(input: StringProductInput) {
     sku: input.sku?.trim() || null,
     trackingUnit: input.trackingUnit,
     defaultSellingPriceCents: input.defaultSellingPriceCents ?? null,
+    reelLengthM: input.trackingUnit === "m" ? input.reelLengthM?.trim() || null : null,
+    reelSellingPriceCents: input.trackingUnit === "m" ? (input.reelSellingPriceCents ?? null) : null,
     lowStockThreshold: input.lowStockThreshold?.trim() || null,
     notes: input.notes?.trim() || null,
   };

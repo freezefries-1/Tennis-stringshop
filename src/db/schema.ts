@@ -410,6 +410,17 @@ export const stringProducts = pgTable("string_products", {
   sku: text("sku"),
   trackingUnit: stringStockUnitEnum("tracking_unit").notNull().default("m"),
   defaultSellingPriceCents: integer("default_selling_price_cents"),
+  // Both null unless this 'm'-tracked string is also sold as a whole,
+  // uncut reel at retail — reelLengthM is how many metres come on one
+  // reel (the conversion factor the POS uses to deduct the right amount
+  // from the metre-denominated batches below when someone sells "1 reel"
+  // instead of cutting a length); reelSellingPriceCents is a flat
+  // per-reel price, independent of the per-metre defaultSellingPriceCents
+  // above (a whole reel isn't necessarily priced at metres × per-metre
+  // rate) — just a starting default, still editable per sale like any
+  // other cart line price.
+  reelLengthM: numeric("reel_length_m", { precision: 10, scale: 2 }),
+  reelSellingPriceCents: integer("reel_selling_price_cents"),
   // Per-product override; falls back to the global default in `settings`
   // (key "inventory_defaults") when null.
   lowStockThreshold: numeric("low_stock_threshold", { precision: 10, scale: 2 }),

@@ -24,7 +24,14 @@ export interface CartLine {
   standardPriceCentsSnapshot: number;
   discountCents: number;
   manualCogsCents?: number | null;
-  unit: "unit" | "m" | "set";
+  unit: "unit" | "m" | "set" | "reel";
+  /** Set only for an 'm'-tracked string product with a reel length/price
+   * configured — lets the cart offer "sell as: metres / whole reel(s)".
+   * meterPriceCentsDefault remembers the per-metre default so toggling
+   * back from reel mode can restore it. */
+  reelLengthM?: number | null;
+  reelSellingPriceCents?: number | null;
+  meterPriceCentsDefault?: number | null;
 }
 
 function newClientRequestId(): string {
@@ -86,6 +93,9 @@ export function PosView({ initialCustomer }: { initialCustomer: PickerCustomer |
           standardPriceCentsSnapshot: item.priceCents ?? 0,
           discountCents: 0,
           unit,
+          reelLengthM: item.reelLengthM ?? null,
+          reelSellingPriceCents: item.reelSellingPriceCents ?? null,
+          meterPriceCentsDefault: item.priceCents ?? null,
         },
       ];
     });
@@ -124,6 +134,7 @@ export function PosView({ initialCustomer }: { initialCustomer: PickerCustomer |
       unitPriceCents: l.unitPriceCents,
       discountCents: l.discountCents,
       manualCogsCents: l.manualCogsCents ?? null,
+      inventoryQuantityOverride: l.unit === "reel" ? l.quantity * (l.reelLengthM ?? 1) : null,
     }));
     const result = await createSaleAction({
       customerId: customer?.id ?? null,
