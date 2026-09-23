@@ -759,6 +759,12 @@ export interface SalesSummary {
    * aren't fully paid. Reversing entries are excluded — a refund is
    * already a settled transaction, never itself "unpaid". */
   unpaidCents: number;
+  /** Cash actually collected (sum of sale_payments.amountCents) across
+   * primary sales in range — distinct from netRevenueCents, which is
+   * accrual-based and counts a Sale as revenue the moment it's recognised,
+   * paid or not (Phase 7 brief §23: never conflate Revenue with Payments
+   * Received/Cash Flow). */
+  paymentsReceivedCents: number;
 }
 
 /** Cancelled Sales never count toward any of these — a cancellation means
@@ -790,6 +796,7 @@ export async function getSalesSummary(filters: SalesFilters): Promise<SalesSumma
     cogsCents,
     grossProfitCents: netRevenueCents - cogsCents,
     unpaidCents: unpaidRows.reduce((sum, r) => sum + Math.max(0, r.totalCents - Number(r.paidCents)), 0),
+    paymentsReceivedCents: unpaidRows.reduce((sum, r) => sum + Number(r.paidCents), 0),
   };
 }
 

@@ -27,6 +27,7 @@ export const NAV: NavItem[] = [
   { value: "catalogue", label: "Racket database", icon: "library" },
   { section: "Money" },
   { value: "expenses", label: "Expenses", icon: "receipt" },
+  { value: "financials", label: "Financials", icon: "trending-up" },
   { value: "reports", label: "Reports", icon: "bar-chart-3" },
 ];
 
@@ -106,13 +107,12 @@ export const PAGES: Record<string, PageMeta> = {
     title: "Expenses",
     label: "Money",
     action: "New expense",
-    phase: 7,
-    builds: [
-      "Date, category, supplier, description, amount, payment method",
-      "Nine default categories plus your own",
-      "Stock purchases are excluded — they are recorded as inventory, not expense",
-      "Feeds net operating profit directly",
-    ],
+    actionHref: "/expenses/new",
+  },
+  financials: {
+    title: "Financials",
+    label: "Money",
+    action: null,
   },
   reports: {
     title: "Reports",

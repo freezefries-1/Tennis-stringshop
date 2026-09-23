@@ -9,9 +9,11 @@ import { ProgressBar } from "@/components/ds/progress-bar";
 import { SpecList, type SpecListItem } from "@/components/ds/spec-list";
 import { StatBlock } from "@/components/ds/stat-block";
 import { DATA } from "@/lib/data";
-import { formatMoney, formatMoney0, formatCents, formatDate } from "@/lib/format";
+import { formatMoney0, formatCents, formatCentsSigned, formatDate } from "@/lib/format";
 import type { RecentMovementRow } from "@/lib/string-inventory";
 import type { DashboardSalesStats, RecentSaleRow } from "@/lib/sales";
+import type { FinancialSummary } from "@/lib/financials";
+import type { ExpenseListRow } from "@/lib/expenses";
 
 function PanelHead({ label, title, action }: { label: string; title?: string; action?: ReactNode }) {
   return (
@@ -25,28 +27,22 @@ function PanelHead({ label, title, action }: { label: string; title?: string; ac
   );
 }
 
-interface PLTotals {
-  rev: number;
-  cogs: number;
-  gross: number;
-  exp: number;
-  net: number;
-}
-
-function PL({ d, label, extra }: { d: PLTotals; label: string; extra?: SpecListItem[] }) {
+/** Real Sales/Expenses figures (Phase 7) — no separate month/year tables,
+ * this is the same getFinancialSummary() Financials page uses, just scoped
+ * to whatever range the dashboard page passed in. */
+function PL({ d, label }: { d: FinancialSummary; label: string }) {
   const items: SpecListItem[] = [
-    { label: "Revenue", value: <span className="num">{formatMoney0(d.rev)}</span> },
-    { label: "COGS", value: <span className="num" style={{ color: "var(--ink-500)" }}>−{formatMoney0(d.cogs)}</span> },
+    { label: "Revenue", value: <span className="num">{formatCents(d.netSalesRevenueCents)}</span> },
+    { label: "COGS", value: <span className="num" style={{ color: "var(--ink-500)" }}>−{formatCents(d.cogsCents)}</span> },
     {
       label: "Gross profit",
       value: (
         <span className="num">
-          {formatMoney0(d.gross)} <span className="pct">{Math.round((d.gross / d.rev) * 100)}%</span>
+          {formatCentsSigned(d.grossProfitCents)} <span className="pct">{d.grossMarginPct === null ? "—" : `${Math.round(d.grossMarginPct)}%`}</span>
         </span>
       ),
     },
-    { label: "Expenses", value: <span className="num" style={{ color: "var(--ink-500)" }}>−{formatMoney0(d.exp)}</span> },
-    ...(extra ?? []),
+    { label: "Expenses", value: <span className="num" style={{ color: "var(--ink-500)" }}>−{formatCents(d.operatingExpensesCents)}</span> },
   ];
   return (
     <Card padding="20px 24px 24px">
@@ -54,7 +50,9 @@ function PL({ d, label, extra }: { d: PLTotals; label: string; extra?: SpecListI
       <SpecList dense items={items} />
       <div className="net">
         <span>Net profit</span>
-        <span className="num">{formatMoney0(d.net)}</span>
+        <span className="num" style={d.netProfitCents < 0 ? { color: "var(--signal-danger)" } : undefined}>
+          {formatCentsSigned(d.netProfitCents)}
+        </span>
       </div>
     </Card>
   );
@@ -381,16 +379,64 @@ function RecentSales({ sales }: { sales: RecentSaleRow[] }) {
   );
 }
 
+function RecentExpenses({ expenses }: { expenses: ExpenseListRow[] }) {
+  const router = useRouter();
+  return (
+    <Card padding="20px 0 8px">
+      <div style={{ padding: "0 24px" }}>
+        <PanelHead
+          label="Recent expenses"
+          action={
+            <Button size="sm" variant="ghost" iconRight="arrow-right" onClick={() => router.push("/expenses")}>
+              All expenses
+            </Button>
+          }
+        />
+      </div>
+      {expenses.length === 0 ? (
+        <div style={{ padding: "0 24px 16px" }} className="row-s">
+          No expenses recorded yet.
+        </div>
+      ) : (
+        <div className="rows">
+          {expenses.map((e) => (
+            <div className="row" key={e.id} onClick={() => router.push(`/expenses/${e.id}`)} style={{ cursor: "pointer" }}>
+              <div className="row-main">
+                <div className="row-t">{e.description}</div>
+                <div className="row-s num">
+                  {e.expenseNumber} · {e.categoryName}
+                </div>
+              </div>
+              <div className="row-end">
+                <span className="row-s num">{formatDate(e.expenseDate)}</span>
+                <span className="num" style={{ fontSize: 14.5, fontWeight: 500 }}>
+                  {formatCents(e.amountCents)}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 export function Dashboard({
   lowStock,
   recentMovements,
   salesStats,
   recentSales,
+  monthFinancials,
+  yearFinancials,
+  recentExpenses,
 }: {
   lowStock: MergedLowStockRow[];
   recentMovements: RecentMovementRow[];
   salesStats: DashboardSalesStats;
   recentSales: RecentSaleRow[];
+  monthFinancials: FinancialSummary;
+  yearFinancials: FinancialSummary;
+  recentExpenses: ExpenseListRow[];
 }) {
   const t = DATA.today;
   return (
@@ -403,7 +449,7 @@ export function Dashboard({
         <Card>
           <StatBlock label="Sales revenue" value={formatMoney0(salesStats.todayRevenueCents / 100)} icon="banknote" />
           <div className="row-s num" style={{ marginTop: 12 }}>
-            This month {formatMoney0(salesStats.monthRevenueCents / 100)} · gross profit {formatMoney0(salesStats.monthGrossProfitCents / 100)}
+            This month {formatCents(monthFinancials.netSalesRevenueCents)} · net profit {formatCentsSigned(monthFinancials.netProfitCents)}
           </div>
         </Card>
         <Card>
@@ -428,15 +474,8 @@ export function Dashboard({
         <div className="hair" />
       </div>
       <div className="g2">
-        <PL
-          d={DATA.month}
-          label="This month · September 2026"
-          extra={[
-            { label: "String jobs", value: <span className="num">{DATA.month.jobs}</span> },
-            { label: "Average job value", value: <span className="num">{formatMoney(DATA.month.avgJob)}</span> },
-          ]}
-        />
-        <PL d={DATA.ytd} label="Year to date · 2026" />
+        <PL d={monthFinancials} label="This month" />
+        <PL d={yearFinancials} label="Year to date" />
       </div>
 
       <div className="g1">
@@ -481,7 +520,8 @@ export function Dashboard({
         <RecentJobs />
         <RecentSales sales={recentSales} />
       </div>
-      <div className="g1">
+      <div className="g2">
+        <RecentExpenses expenses={recentExpenses} />
         <RecentInventoryMovements movements={recentMovements} />
       </div>
     </div>

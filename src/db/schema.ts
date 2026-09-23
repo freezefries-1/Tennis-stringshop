@@ -712,24 +712,114 @@ export const salePayments = pgTable("sale_payments", {
   ...timestamps,
 });
 
+// -- expenses (Phase 7) ------------------------------------------------------
+//
+// Operating expenses only — never inventory. Buying a $180 string reel or
+// $1,200 of paddles is a purchase that converts cash into inventory (an
+// inventory_batches row via Receive Stock); it becomes COGS only when that
+// stock is sold, via the existing FIFO machinery. Recording the same
+// purchase here too would double-count it (once as inventory cost via COGS,
+// once as an operating expense) — there is deliberately no "Inventory"
+// expense category offered anywhere in this table's UI, and the workflow
+// itself keeps the two paths separate (Receive Stock vs Add Expense), not
+// just a flag on a shared category list. See src/lib/financials.ts's
+// file-level comment for the full revenue/COGS/expense formula writeup.
+
+export const expenseCodeSeq = pgSequence("expense_code_seq", { startWith: 1, minValue: 1 });
+
 export const expenseCategories = pgTable("expense_categories", {
   id: id(),
-  name: text("name").notNull(),
-  // Stock purchases are never recorded here — see docs/architecture.html §05,
-  // "the inventory-vs-expense trap". This flag excludes a category from opex.
-  isInventory: boolean("is_inventory").notNull().default(false),
+  name: text("name").notNull().unique(),
+  // Archived categories stay on historical Expenses (categoryId still
+  // resolves and joins fine) but are filtered out of the picker on new/
+  // edited Expenses — same convention as productCategories/racketBrands.
   archivedAt: timestamp("archived_at", { withTimezone: true }),
+  ...timestamps,
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const expenseTreatmentEnum = pgEnum("expense_treatment", ["operating", "capital"]);
+// Never "deleted" — a Void is a new fact (this expense turned out to be
+// wrong/duplicate), not an erasure of the original one. Voided rows stay in
+// the table, excluded from every financial total by a status filter, same
+// append-only philosophy as the inventory ledgers and Sales reversals.
+export const expenseStatusEnum = pgEnum("expense_status", ["recorded", "voided"]);
+export const recurringFrequencyEnum = pgEnum("recurring_frequency", ["weekly", "monthly", "quarterly", "yearly"]);
+
+// A template only — never itself counted as an expense (brief §15). Each
+// actual occurrence is a real row in `expenses` with recurringExpenseId set
+// back to this row; nextDueDate advances only when an occurrence is
+// generated for it (see generateDueExpense in src/lib/recurring-expenses.ts),
+// which is also what makes "generate September twice" a no-op rather than a
+// duplicate — the second attempt finds nextDueDate already past September.
+export const recurringExpenses = pgTable("recurring_expenses", {
+  id: id(),
+  description: text("description").notNull(),
+  categoryId: uuid("category_id").notNull().references(() => expenseCategories.id),
+  vendor: text("vendor"),
+  // The template's current amount — changing it (e.g. $30 -> $35) only ever
+  // affects occurrences generated after the change (brief §17). Past
+  // `expenses` rows already snapshot their own amountCents and are never
+  // rewritten when this changes.
+  amountCents: integer("amount_cents").notNull(),
+  frequency: recurringFrequencyEnum("frequency").notNull(),
+  startDate: date("start_date").notNull(),
+  endDate: date("end_date"),
+  nextDueDate: date("next_due_date").notNull(),
+  // Free text, not paymentMethodEnum (used by Sales/jobs) — expenses have a
+  // slightly different set of practical options (brief §10: "also consider
+  // Personal Card / Business Card"), kept as plain text so the two contexts'
+  // option lists can differ without a shared enum coupling them together.
+  paymentMethod: text("payment_method"),
+  notes: text("notes"),
+  active: boolean("active").notNull().default(true),
+  ...timestamps,
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 export const expenses = pgTable("expenses", {
   id: id(),
-  incurredOn: date("incurred_on").notNull(),
-  categoryId: uuid("category_id").notNull().references(() => expenseCategories.id),
-  supplierId: uuid("supplier_id").references(() => suppliers.id),
+  expenseNumber: text("expense_number")
+    .notNull()
+    .unique()
+    .default(sql`'E' || lpad(nextval('expense_code_seq')::text, 4, '0')`), // E0001
+  expenseDate: date("expense_date").notNull(),
   description: text("description").notNull(),
+  categoryId: uuid("category_id").notNull().references(() => expenseCategories.id),
+  vendor: text("vendor"),
   amountCents: integer("amount_cents").notNull(),
-  paymentMethod: text("payment_method").notNull(),
+  paymentMethod: text("payment_method"),
+  referenceNumber: text("reference_number"),
+  // A URL reference (e.g. a photo already hosted in the phone's own cloud
+  // backup/Drive/Photos), not an uploaded file — this environment has no
+  // Supabase Storage credentials configured (only DATABASE_URL), and brief
+  // §12 explicitly prefers "prepare the schema/UI cleanly and report it as
+  // a limitation" over an unverified upload shortcut. The column itself
+  // (a plain URL string) is deliberately storage-provider-agnostic, so
+  // swapping in real upload/storage later is a UI change, not a schema one.
+  receiptUrl: text("receipt_url"),
   notes: text("notes"),
+  recurringExpenseId: uuid("recurring_expense_id").references(() => recurringExpenses.id),
+  treatment: expenseTreatmentEnum("treatment").notNull().default("operating"),
+  status: expenseStatusEnum("status").notNull().default("recorded"),
+  voidedAt: timestamp("voided_at", { withTimezone: true }),
+  voidReason: text("void_reason"),
+  ...timestamps,
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// Financially-material edits (amount/date/category — brief §9) get an
+// audit row alongside the ordinary updatedAt bump, so "this $180 expense
+// used to say $150" stays reconstructable rather than silently overwritten.
+// Not a full field-by-field diff engine — just the whole before/after
+// snapshot of the fields that matter for a P&L.
+export const expenseAuditLog = pgTable("expense_audit_log", {
+  id: id(),
+  expenseId: uuid("expense_id").notNull().references(() => expenses.id, { onDelete: "cascade" }),
+  action: text("action").notNull(), // "created" | "updated" | "voided"
+  oldValues: jsonb("old_values"),
+  newValues: jsonb("new_values"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 // Business name, currency, default labour charge, default string usage,

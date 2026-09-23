@@ -10,6 +10,13 @@ export function formatCents(cents: number): string {
   return formatMoney(cents / 100);
 }
 
+/** Same as formatCents, but a loss keeps its minus sign in the usual place
+ * ("-$450.00") instead of "$-450.00" — Net Profit must be able to show a
+ * loss without being clamped to zero. */
+export function formatCentsSigned(cents: number): string {
+  return cents < 0 ? `-${formatCents(-cents)}` : formatCents(cents);
+}
+
 export function formatDate(d: Date | string | null | undefined): string {
   if (!d) return "—";
   return new Date(d).toLocaleDateString("en-SG", { day: "numeric", month: "short", year: "numeric" });

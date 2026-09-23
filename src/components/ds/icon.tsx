@@ -30,6 +30,9 @@ import {
   Archive,
   RotateCcw,
   AlertCircle,
+  ChevronLeft,
+  Wallet,
+  TrendingUp,
   type LucideIcon,
 } from "lucide-react";
 
@@ -65,6 +68,9 @@ const ICONS: Record<string, LucideIcon> = {
   archive: Archive,
   "rotate-ccw": RotateCcw,
   "alert-circle": AlertCircle,
+  "chevron-left": ChevronLeft,
+  wallet: Wallet,
+  "trending-up": TrendingUp,
 };
 
 export interface IconProps {
