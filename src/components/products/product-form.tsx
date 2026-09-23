@@ -8,9 +8,11 @@ import { Field } from "@/components/ds/field";
 import { Input } from "@/components/ds/input";
 import { Button } from "@/components/ds/button";
 import { Combobox } from "@/components/ds/combobox";
-import { createProductAction, updateProductAction, quickCreateSupplierAction } from "@/app/products/actions";
+import { createProductAction, updateProductAction, quickCreateSupplierAction, receiveProductStockAction } from "@/app/products/actions";
 import type { Product, ProductCategory } from "@/lib/products";
 import type { Supplier } from "@/lib/string-inventory";
+
+const TODAY = new Date().toISOString().slice(0, 10);
 
 function selectStyle(): React.CSSProperties {
   return { height: 38, padding: "0 12px", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", background: "var(--paper-000)", fontFamily: "var(--font-body)", fontSize: 15, width: "100%" };
@@ -31,6 +33,7 @@ export function ProductForm({ mode, product, categories, suppliers: initialSuppl
   const [supplier, setSupplier] = useState<Supplier | null>(initialSuppliers.find((s) => s.id === product?.supplierId) ?? null);
   const [trackInventory, setTrackInventory] = useState(product?.trackInventory ?? true);
   const [notes, setNotes] = useState(product?.notes ?? "");
+  const [openingStockQty, setOpeningStockQty] = useState("");
 
   const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -57,7 +60,18 @@ export function ProductForm({ mode, product, categories, suppliers: initialSuppl
       setSaving(false);
       return;
     }
-    if (mode === "create" && trackInventory) {
+    const openingQty = Math.round(Number.parseFloat(openingStockQty) || 0);
+    if (mode === "create" && trackInventory && openingQty > 0) {
+      await receiveProductStockAction({
+        productId: result.productId!,
+        supplierId: supplier?.id ?? null,
+        purchaseDate: TODAY,
+        purchaseCostCents: (input.costPriceCents ?? 0) * openingQty,
+        quantity: openingQty,
+        isOpeningStock: true,
+      });
+      router.push(`/products/${result.productId}`);
+    } else if (mode === "create" && trackInventory) {
       router.push(`/products/receive?productId=${result.productId}`);
     } else {
       router.push(`/products/${result.productId}`);
@@ -116,7 +130,7 @@ export function ProductForm({ mode, product, categories, suppliers: initialSuppl
         <Field label="Selling price" hint="Optional" htmlFor="dsp">
           <Input id="dsp" type="number" inputMode="decimal" min="0" step="0.01" value={defaultSellingPrice} onChange={(e) => setDefaultSellingPrice(e.target.value)} suffix="SGD" style={{ width: "100%" }} />
         </Field>
-        <Field label="Cost price" hint={trackInventory ? "Optional — pre-fills the first stock receipt" : "Used as this product's COGS (no batches, since stock isn't tracked)"} htmlFor="cost">
+        <Field label="Cost price" hint={trackInventory ? "Optional — per-unit cost for the opening stock below" : "Used as this product's COGS (no batches, since stock isn't tracked)"} htmlFor="cost">
           <Input id="cost" type="number" inputMode="decimal" min="0" step="0.01" value={costPrice} onChange={(e) => setCostPrice(e.target.value)} suffix="SGD" style={{ width: "100%" }} />
         </Field>
       </div>
@@ -151,6 +165,11 @@ export function ProductForm({ mode, product, categories, suppliers: initialSuppl
             }}
           />
         </div>
+      ) : null}
+      {trackInventory && mode === "create" ? (
+        <Field label="Opening stock" hint="Optional — how many you already have on hand. Leave blank to receive stock as a separate step later." htmlFor="openingStock">
+          <Input id="openingStock" type="number" inputMode="numeric" min="0" step="1" value={openingStockQty} onChange={(e) => setOpeningStockQty(e.target.value)} suffix="units" style={{ width: "100%" }} />
+        </Field>
       ) : null}
       <Field label="Notes" htmlFor="notes">
         <textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
