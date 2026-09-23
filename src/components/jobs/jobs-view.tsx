@@ -59,21 +59,27 @@ export function JobsView({ jobs, stats }: { jobs: JobListRow[]; stats: JobStats 
 
   const doneCount = useMemo(() => jobs.filter(isDone).length, [jobs]);
   const cancelledCount = useMemo(() => jobs.filter(isCancelled).length, [jobs]);
-  // Searching or explicitly asking for Collected/Paid always reveals done
-  // jobs too — the hide is only a default-view declutter, never a place
-  // data actually goes missing.
-  const revealDone = showDone || q.trim() !== "" || status === "collected" || paymentStatus === "paid";
-  // Same declutter-only reasoning, but a separate toggle from isDone's —
-  // cancelled jobs sometimes need reopening/editing, so an explicit
-  // "Cancelled" status filter or a search hit reveals them too.
-  const revealCancelled = showCancelled || q.trim() !== "" || status === "cancelled";
+  // Searching or explicitly asking for Collected/Paid always bypasses the
+  // default hide — the hide is only a default-view declutter, never a
+  // place data actually goes missing — even with both checkboxes off.
+  const bypassDoneHide = q.trim() !== "" || status === "collected" || paymentStatus === "paid";
+  // Same declutter-only reasoning for the separate cancelled toggle.
+  const bypassCancelledHide = q.trim() !== "" || status === "cancelled";
+  // Checking either checkbox switches the list to showing ONLY that
+  // category (or the union of both, if both are checked) instead of
+  // mixing done/cancelled jobs back in alongside active ones.
+  const onlyCategory = showDone || showCancelled;
 
   const filtered = useMemo(() => {
     const s = normalize(q);
     const digits = digitsOnly(q);
     let rows = jobs.filter((j) => {
-      if (!revealDone && isDone(j)) return false;
-      if (!revealCancelled && isCancelled(j)) return false;
+      if (onlyCategory) {
+        if (!((showDone && isDone(j)) || (showCancelled && isCancelled(j)))) return false;
+      } else {
+        if (!bypassDoneHide && isDone(j)) return false;
+        if (!bypassCancelledHide && isCancelled(j)) return false;
+      }
       if (status && j.status !== status) return false;
       if (paymentStatus && j.paymentStatus !== paymentStatus) return false;
       if (due === "today") {
@@ -102,7 +108,7 @@ export function JobsView({ jobs, stats }: { jobs: JobListRow[]; stats: JobStats 
       }
     });
     return rows;
-  }, [jobs, q, status, paymentStatus, due, sort, revealDone, revealCancelled]);
+  }, [jobs, q, status, paymentStatus, due, sort, onlyCategory, showDone, showCancelled, bypassDoneHide, bypassCancelledHide]);
 
   const goTo = (id: string) => router.push(`/jobs/${id}`);
 
