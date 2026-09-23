@@ -8,7 +8,8 @@ import { Badge } from "@/components/ds/badge";
 import { Button } from "@/components/ds/button";
 import type { JobListRow, JobStats } from "@/lib/jobs";
 import { formatCents, formatDate } from "@/lib/format";
-import { JOB_STATUSES, JOB_STATUS_LABEL, JOB_STATUS_TONE, PAYMENT_STATUS_LABEL, PAYMENT_STATUS_TONE } from "./job-status";
+import { JOB_STATUSES, JOB_STATUS_LABEL, PAYMENT_STATUS_LABEL, PAYMENT_STATUS_TONE } from "./job-status";
+import { JobStatusSelect } from "./job-status-select";
 
 function normalize(s: string) {
   return s.trim().toLowerCase();
@@ -188,10 +189,8 @@ export function JobsView({ jobs, stats }: { jobs: JobListRow[]; stats: JobStats 
                       <td className="num">{tensionDisplay(j)}</td>
                       <td className="num">{formatDate(j.receivedOn)}</td>
                       <td className="num">{j.dueOn ? formatDate(j.dueOn) : "—"}</td>
-                      <td>
-                        <Badge tone={JOB_STATUS_TONE[j.status]} dot>
-                          {JOB_STATUS_LABEL[j.status]}
-                        </Badge>
+                      <td onClick={(e) => e.stopPropagation()}>
+                        <JobStatusSelect jobId={j.id} status={j.status} />
                       </td>
                       <td>
                         <Badge tone={PAYMENT_STATUS_TONE[j.paymentStatus]} dot>
@@ -240,11 +239,9 @@ export function JobsView({ jobs, stats }: { jobs: JobListRow[]; stats: JobStats 
                       {PAYMENT_STATUS_LABEL[j.paymentStatus]}
                     </Badge>
                   </div>
-                  <div className="ccard-stat">
+                  <div className="ccard-stat" onClick={(e) => e.stopPropagation()}>
                     <span className="lab">Status</span>
-                    <Badge tone={JOB_STATUS_TONE[j.status]} dot>
-                      {JOB_STATUS_LABEL[j.status]}
-                    </Badge>
+                    <JobStatusSelect jobId={j.id} status={j.status} />
                   </div>
                 </div>
               </Card>
