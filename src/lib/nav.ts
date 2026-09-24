@@ -22,7 +22,10 @@ export const NAV: NavItem[] = [
   { value: "customers", label: "Customers", icon: "users" },
   { value: "rackets", label: "Rackets", icon: "circle-dot" },
   { section: "Stock" },
-  { value: "inventory", label: "Inventory", icon: "layers", count: 4 },
+  // count is intentionally omitted here too — see the sidebar's live
+  // low-stock fetch (nav-actions.ts's fetchLowStockCount), same reasoning
+  // as jobs' live active-count just above.
+  { value: "inventory", label: "Inventory", icon: "layers" },
   { value: "products", label: "Products", icon: "package" },
   { value: "catalogue", label: "Racket database", icon: "library" },
   { value: "machines", label: "Machines", icon: "cog" },

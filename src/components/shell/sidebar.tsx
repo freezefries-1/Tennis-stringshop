@@ -4,19 +4,25 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Icon } from "@/components/ds/icon";
 import { FOOTER_NAV, NAV } from "@/lib/nav";
-import { fetchActiveJobsCount } from "./nav-actions";
+import { fetchActiveJobsCount, fetchLowStockCount } from "./nav-actions";
 
 export function Sidebar({ page }: { page: string }) {
-  // Real active-job count for "String jobs" (received/waiting/in_progress —
-  // same definition as the Jobs page's own stat card), replacing the old
-  // static seed-data count. Re-fetched whenever the top-level route
-  // changes, since the sidebar itself stays mounted across navigations and
-  // wouldn't otherwise notice a job completed/created/cancelled elsewhere.
+  // Real counts for "String jobs" (received/waiting/in_progress — same
+  // definition as the Jobs page's own stat card) and "Inventory" (low +
+  // out of stock, same definition as /inventory's own stat), replacing the
+  // old static seed-data counts (jobs already fixed; inventory was still
+  // hardcoded to "4"). Re-fetched whenever the top-level route changes,
+  // since the sidebar itself stays mounted across navigations and
+  // wouldn't otherwise notice a job/stock change made elsewhere.
   const [activeJobs, setActiveJobs] = useState<number | null>(null);
+  const [lowStock, setLowStock] = useState<number | null>(null);
   useEffect(() => {
     let cancelled = false;
-    fetchActiveJobsCount().then((n) => {
-      if (!cancelled) setActiveJobs(n);
+    Promise.all([fetchActiveJobsCount(), fetchLowStockCount()]).then(([jobs, stock]) => {
+      if (!cancelled) {
+        setActiveJobs(jobs);
+        setLowStock(stock);
+      }
     });
     return () => {
       cancelled = true;
@@ -40,7 +46,7 @@ export function Sidebar({ page }: { page: string }) {
               <Icon name={n.icon!} size={17} />
               <span>{n.label}</span>
               {(() => {
-                const count = n.value === "jobs" ? activeJobs : n.count;
+                const count = n.value === "jobs" ? activeJobs : n.value === "inventory" ? lowStock : n.count;
                 return count ? <span className="nav-c num">{count}</span> : null;
               })()}
             </Link>
