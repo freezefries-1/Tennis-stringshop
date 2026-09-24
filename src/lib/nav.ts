@@ -124,14 +124,14 @@ export const PAGES: Record<string, PageMeta> = {
   reports: {
     title: "Reports",
     label: "Money",
-    action: "Export CSV",
-    phase: 8,
-    builds: [
-      "P&L by day, week, month, year or custom range",
-      "Filter by stringing, product sales, customisation, other services",
-      "Top strings by usage and by margin, best sellers, inventory value",
-      "Customer lifetime value, repeat rate, jobs per month",
-    ],
+    // No top-bar action — Phase 8 built this for real. A generic "Export
+    // CSV" button here (the Phase 1-7 placeholder convention: action text
+    // with no actionHref renders a real-looking Button with no onClick at
+    // all — see top-bar.tsx) would be genuinely broken now, not just
+    // decorative: it can't know which report/tab/date-range to export.
+    // Each report has its own correctly-filtered Export CSV button inside
+    // the page instead (financial-reports-view.tsx and friends).
+    action: null,
   },
   settings: {
     title: "Settings",
