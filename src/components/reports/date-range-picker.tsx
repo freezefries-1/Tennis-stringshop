@@ -46,14 +46,14 @@ export function DateRangePicker({ basePath, initialFrom, initialTo, extraParams 
         ))}
       </select>
       {dateFilter === "custom" ? (
-        <>
-          <Field label="From" style={{ width: 160, minWidth: 0 }}>
+        <div className="date-range-custom">
+          <Field label="From" style={{ flex: "1 1 160px", minWidth: 0, maxWidth: 200 }}>
             <Input type="date" value={customFrom} onChange={(e) => { setCustomFrom(e.target.value); pushPreset("custom", e.target.value, customTo); }} style={{ width: "100%", minWidth: 0 }} />
           </Field>
-          <Field label="To" style={{ width: 160, minWidth: 0 }}>
+          <Field label="To" style={{ flex: "1 1 160px", minWidth: 0, maxWidth: 200 }}>
             <Input type="date" value={customTo} onChange={(e) => { setCustomTo(e.target.value); pushPreset("custom", customFrom, e.target.value); }} style={{ width: "100%", minWidth: 0 }} />
           </Field>
-        </>
+        </div>
       ) : null}
     </div>
   );

@@ -123,6 +123,12 @@ a.nav-i:hover,a.mnav-i:hover,a.sheet-i:hover,a.row:hover{color:var(--ink-700);bo
    doesn't strand that one control alone on the right of its own wrapped
    line while everything else stays left-aligned. */
 .rec-tools-push{margin-left:auto}
+/* DateRangePicker's custom From/To pair: sits inline next to the preset
+   select on desktop (room for all three on one line), but below 760px
+   takes the full row width so the pair wraps onto its own line as a unit
+   — "From" and "To" never split across two lines from each other. */
+.date-range-custom{display:flex;gap:12px;min-width:0}
+@media(max-width:760px){.date-range-custom{flex:1 1 100%}}
 .dtable-wrap{display:block}
 .dtable{width:100%;border-collapse:collapse}
 .dtable th{text-align:left;padding:10px 16px;font-family:var(--font-mono);font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-400);border-bottom:1px solid var(--ink-100);white-space:nowrap}
