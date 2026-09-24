@@ -15,7 +15,7 @@ export const NAV: NavItem[] = [
   // count is intentionally omitted here — the sidebar shows a real,
   // live active-jobs count for this one entry (see nav-actions.ts),
   // not a static seed-data number the way inventory's still does.
-  { value: "jobs", label: "String jobs", icon: "wrench" },
+  { value: "jobs", label: "String Job", icon: "wrench" },
   { value: "pos", label: "POS", icon: "scan-line" },
   { value: "sales", label: "Sales", icon: "banknote" },
   { section: "People" },

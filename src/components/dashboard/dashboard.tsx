@@ -197,7 +197,8 @@ function RecentInventoryMovements({ movements }: { movements: RecentMovementRow[
   const router = useRouter();
   const MOVEMENT_LABEL: Record<string, string> = {
     received: "Stock received",
-    string_job: "String job",
+    string_job: "String Job",
+    retail_sale: "Retail Sale",
     manual_add: "Manual addition",
     manual_deduct: "Manual deduction",
     wastage: "Wastage",
