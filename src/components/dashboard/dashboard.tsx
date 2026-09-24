@@ -387,6 +387,7 @@ export function Dashboard({
   comparison,
   readyForCollection,
   recentJobs,
+  activeJobCount,
   initialFrom,
   initialTo,
 }: {
@@ -401,10 +402,10 @@ export function Dashboard({
   comparison: PeriodComparison;
   readyForCollection: ReadyForCollectionRow[];
   recentJobs: RecentJobRow[];
+  activeJobCount: number;
   initialFrom: string;
   initialTo: string;
 }) {
-  const t = DATA.today;
   const mixTotal = salesSplit.stringing.revenueCents + salesSplit.retail.revenueCents + salesSplit.other.revenueCents;
   return (
     <div className="dash">
@@ -429,10 +430,7 @@ export function Dashboard({
           </div>
         </Card>
         <Card>
-          <ProgressBar label="Bench load" value={t.benchLoad} max={t.benchCapacity} valueLabel={`${t.benchLoad} / ${t.benchCapacity}`} />
-          <div className="row-s num" style={{ marginTop: 12 }}>
-            {t.dueToday} due today · {DATA.unbilled} completed but unbilled
-          </div>
+          <StatBlock label="Active jobs" value={activeJobCount} icon="wrench" />
         </Card>
       </div>
 

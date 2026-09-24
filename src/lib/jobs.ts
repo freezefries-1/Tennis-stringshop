@@ -693,6 +693,18 @@ export async function getJobSetupForRepeat(jobId: string): Promise<PreviousJobSe
 
 // -- dashboard --------------------------------------------------------------
 
+/** Still in the pipeline (received/waiting/in_progress) — same definition as
+ * getJobStats' activeJobs, so the Jobs list and the Dashboard can never
+ * disagree. Its own minimal query rather than reusing getJobStats, which
+ * also pulls in a getSalesSplit call the Dashboard doesn't need here. */
+export async function getActiveJobCount(): Promise<number> {
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(stringJobs)
+    .where(inArray(stringJobs.status, ["received", "waiting", "in_progress"]));
+  return row?.count ?? 0;
+}
+
 export interface ReadyForCollectionRow {
   id: string;
   code: string;
