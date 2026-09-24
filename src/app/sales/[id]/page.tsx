@@ -136,7 +136,7 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
         Sale items
       </div>
       <div style={{ overflowX: "auto" }}>
-        <Card padding="0">
+        <Card padding="0" style={{ display: "inline-block", minWidth: "100%" }}>
           <table className="dtable">
             <thead>
               <tr>
@@ -191,7 +191,7 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
         </Card>
       ) : (
         <div style={{ overflowX: "auto" }}>
-          <Card padding="0">
+          <Card padding="0" style={{ display: "inline-block", minWidth: "100%" }}>
             <table className="dtable">
               <thead>
                 <tr>
