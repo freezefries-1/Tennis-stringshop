@@ -13,6 +13,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [more, setMore] = useState(false);
   const page = pathname === "/" ? DEFAULT_PAGE : pathname.slice(1).split("/")[0];
 
+  // The PIN lock screen isn't part of the app proper — no sidebar/top bar
+  // to click through to pages the proxy (src/proxy.ts) will just bounce
+  // straight back here anyway.
+  if (page === "unlock") return <>{children}</>;
+
   return (
     <div className="app">
       <Sidebar page={page} />
