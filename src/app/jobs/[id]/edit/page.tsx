@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { getJob } from "@/lib/jobs";
 import { getStringUsageDefaults } from "@/lib/settings";
+import { listMachineOptions } from "@/lib/machines";
 import { JobForm } from "@/components/jobs/job-form";
 import { CancelJobButton } from "@/components/jobs/cancel-job-button";
 import { updateJobAction } from "@/app/jobs/actions";
@@ -12,6 +13,7 @@ export default async function EditJobPage({ params }: { params: Promise<{ id: st
   const { id } = await params;
   const [job, stringUsageDefaults] = await Promise.all([getJob(id), getStringUsageDefaults()]);
   if (!job) notFound();
+  const machineOptions = await listMachineOptions(job.machineId);
 
   const main = job.strings.find((s) => s.role === "main");
   const cross = job.strings.find((s) => s.role === "cross");
@@ -32,6 +34,7 @@ export default async function EditJobPage({ params }: { params: Promise<{ id: st
       discount: job.discountCents ? (job.discountCents / 100).toFixed(2) : "",
       generalNotes: job.generalNotes ?? "",
       stringingNotes: job.stringingNotes ?? "",
+      machineId: job.machineId ?? "",
       main: toStringLine(main),
       cross: toStringLine(cross),
       services: job.services.length
@@ -58,6 +61,7 @@ export default async function EditJobPage({ params }: { params: Promise<{ id: st
           initialCustomer={initialCustomer}
           initialRacket={job.racket}
           stringUsageDefaults={stringUsageDefaults}
+          machineOptions={machineOptions}
           submitLabel="Save changes"
         />
       </div>

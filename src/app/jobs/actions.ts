@@ -78,6 +78,7 @@ function readValues(formData: FormData): JobFormValues {
     discount: get("discount"),
     generalNotes: get("generalNotes"),
     stringingNotes: get("stringingNotes"),
+    machineId: get("machineId"),
     main: {
       customerSupplied: main.customerSupplied,
       stringProductId: main.stringProductId ?? "",
@@ -140,6 +141,7 @@ function toInput(values: JobFormValues): JobInput {
     discountCents: Math.round((Number.parseFloat(values.discount) || 0) * 100),
     generalNotes: values.generalNotes || null,
     stringingNotes: values.stringingNotes || null,
+    machineId: values.machineId || null,
     strings: [mains, crosses],
     services,
   };

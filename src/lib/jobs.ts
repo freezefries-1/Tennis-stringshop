@@ -64,6 +64,7 @@ export interface JobInput {
   discountCents: number;
   generalNotes?: string | null;
   stringingNotes?: string | null;
+  machineId?: string | null;
   strings: StringSetupInput[];
   services: ServiceInput[];
 }
@@ -136,6 +137,7 @@ export async function createJob(input: JobInput): Promise<StringJob> {
       finalPriceCents,
       generalNotes: input.generalNotes?.trim() || null,
       stringingNotes: input.stringingNotes?.trim() || null,
+      machineId: input.machineId || null,
       racketLabel: racketLabel({
         brand: r.effectiveBrand,
         series: r.effectiveSeries,
@@ -238,6 +240,7 @@ export async function updateJob(id: string, input: JobInput, opts?: { allowStock
           finalPriceCents,
           generalNotes: input.generalNotes?.trim() || null,
           stringingNotes: input.stringingNotes?.trim() || null,
+          machineId: input.machineId || null,
           updatedAt: new Date(),
         })
         .where(eq(stringJobs.id, id))

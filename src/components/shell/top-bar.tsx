@@ -33,9 +33,11 @@ export function TopBar({ page }: { page: string }) {
           )
         ) : null}
         {page === "dashboard" ? (
-          <Button size="sm" iconLeft="plus">
-            New string job
-          </Button>
+          <Link href="/jobs/new">
+            <Button size="sm" iconLeft="plus">
+              New string job
+            </Button>
+          </Link>
         ) : null}
       </div>
     </header>

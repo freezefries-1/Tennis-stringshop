@@ -52,6 +52,10 @@ export interface JobFormValues {
   discount: string; // dollars
   generalNotes: string;
   stringingNotes: string;
+  /** Which stringing machine did this job — "" means not recorded. Also
+   * settable later from the job's own detail page (MachineSelect), so this
+   * is just a convenience to set it up front instead of a second step. */
+  machineId: string;
   main: StringLineValues;
   cross: StringLineValues;
   services: ServiceLineValues[];
@@ -92,6 +96,7 @@ export function emptyJobFormValues(receivedOn: string): JobFormValues {
     discount: "",
     generalNotes: "",
     stringingNotes: "",
+    machineId: "",
     main: { ...emptyStringLine },
     cross: { ...emptyStringLine },
     services: [

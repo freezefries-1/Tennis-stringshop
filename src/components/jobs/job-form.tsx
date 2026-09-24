@@ -16,6 +16,7 @@ import { formatCents, formatDate } from "@/lib/format";
 import type { RacketWithSpecs } from "@/lib/rackets";
 import { fetchPreviousSetup, fetchSuggestedStringUsage } from "@/app/jobs/actions";
 import type { PreviousJobSetup } from "@/lib/jobs";
+import type { MachineOption } from "@/lib/machines";
 import type { SuggestedStringUsage } from "@/lib/string-usage";
 import { applyRepeatToValues, type JobFormState, type JobFormValues, type StringUsageDefaultsView } from "@/lib/job-form-types";
 
@@ -92,6 +93,7 @@ export function JobForm({
   initialCustomer = null,
   initialRacket = null,
   stringUsageDefaults,
+  machineOptions,
   submitLabel,
 }: {
   mode: "create" | "edit";
@@ -108,6 +110,7 @@ export function JobForm({
   initialCustomer?: PickerCustomer | null;
   initialRacket?: RacketWithSpecs | null;
   stringUsageDefaults: StringUsageDefaultsView;
+  machineOptions: MachineOption[];
   submitLabel: string;
 }) {
   const [state, formAction] = useActionState(action, initialState);
@@ -199,6 +202,7 @@ export function JobForm({
       <input type="hidden" name="discount" value={values.discount} />
       <input type="hidden" name="generalNotes" value={values.generalNotes} />
       <input type="hidden" name="stringingNotes" value={values.stringingNotes} />
+      <input type="hidden" name="machineId" value={values.machineId} />
       <input type="hidden" name="allowStockOverride" value={String(stockOverride)} />
       <input type="hidden" name="main.customerSupplied" value={String(values.main.customerSupplied)} />
       <input type="hidden" name="main.stringProductId" value={values.main.stringProductId} />
@@ -423,6 +427,21 @@ export function JobForm({
                   <option value="transfer">Bank transfer</option>
                   <option value="card">Card</option>
                   <option value="other">Other</option>
+                </select>
+              </Field>
+              <Field label="Machine used" htmlFor="machineId" hint="Optional — can also be set later from the job's own page.">
+                <select
+                  id="machineId"
+                  value={values.machineId}
+                  onChange={(e) => patch({ machineId: e.target.value })}
+                  style={{ height: 38, padding: "0 12px", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", background: "var(--paper-000)", fontFamily: "var(--font-body)", fontSize: 14, width: "100%" }}
+                >
+                  <option value="">Not recorded</option>
+                  {machineOptions.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                    </option>
+                  ))}
                 </select>
               </Field>
             </Card>
