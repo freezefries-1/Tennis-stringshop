@@ -14,7 +14,13 @@ import type { StringProductRow, Supplier, StockUnit } from "@/lib/string-invento
 const TODAY = new Date().toISOString().slice(0, 10);
 
 function productOptionLabel(p: StringProductRow): string {
-  return [p.brand, p.name, p.gauge ? `${p.gauge}mm` : null, p.colour].filter(Boolean).join(" ");
+  const base = [p.brand, p.name, p.gauge ? `${p.gauge}mm` : null, p.colour].filter(Boolean).join(" ");
+  // The same brand+name is sometimes tracked twice — once as reels, once as
+  // sets (a product's trackingUnit can't mix both, see schema.ts) — so the
+  // unit has to be part of the label itself, not a separate badge, since
+  // this reuses the generic Combobox (label-string only, no secondary line)
+  // and its selected-chip view renders straight off this same string.
+  return `${base} — ${p.trackingUnit === "set" ? "Set" : "Reel"}`;
 }
 
 export function ReceiveStockForm({ products, suppliers: initialSuppliers, initialProductId }: { products: StringProductRow[]; suppliers: Supplier[]; initialProductId?: string }) {
