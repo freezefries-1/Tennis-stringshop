@@ -114,7 +114,14 @@ export function RacketPicker({ customerId, selected, onSelect }: { customerId: s
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <Combobox
         label="Racket"
-        placeholder={loading ? "Loading…" : "Search racket ID, brand or model"}
+        // "on file for this customer" is deliberate, not "search the racket
+        // database" — this list is scoped to rackets already linked to
+        // THIS customer (fetchRacketsForCustomer), so a brand-new customer
+        // (or one whose racket isn't added yet) will always come up empty
+        // here no matter what's in the racket database. Typing a brand name
+        // expecting a database-wide search was the exact confusion reported
+        // — "+ Add racket" below is the only way into that search.
+        placeholder={loading ? "Loading…" : "Search this customer's rackets on file"}
         options={rackets ?? []}
         getLabel={racketOptionLabel}
         getKey={(r) => r.id}
@@ -125,6 +132,19 @@ export function RacketPicker({ customerId, selected, onSelect }: { customerId: s
         onAddNew={(q) => setQuickAdd(q)}
       />
       {rackets && rackets.length === 0 && !loading ? <div className="row-s">No rackets on file for this customer yet.</div> : null}
+      {/* A direct, always-visible button — not just the Combobox's "type
+          something to reveal + Add" affordance, which isn't obvious if you
+          don't already know it's there (the confusion actually reported:
+          typing a brand name into the box above, which only searches THIS
+          customer's own rackets, instead of clicking through to the racket-
+          database search this button opens). Shown regardless of whether
+          the customer already has rackets on file, since adding a second
+          or third one hits the same discoverability gap as the first. */}
+      {!loading && !selected && quickAdd === null ? (
+        <Button type="button" size="sm" variant="secondary" iconLeft="plus" onClick={() => setQuickAdd("")} style={{ alignSelf: "flex-start" }}>
+          Add racket
+        </Button>
+      ) : null}
       {quickAdd !== null ? (
         <QuickAddRacket
           customerId={customerId}
