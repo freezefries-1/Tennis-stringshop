@@ -118,6 +118,11 @@ a.nav-i:hover,a.mnav-i:hover,a.sheet-i:hover,a.row:hover{color:var(--ink-700);bo
 .rec-wrap{display:flex;flex-direction:column;gap:16px;max-width:1200px}
 .rec-tools{display:flex;gap:12px;align-items:center}
 .rec-tools .search{flex:1;max-width:420px;margin-left:0}
+/* For a trailing control (Sort, "Manage brands & series") meant to sit at
+   the far end of the row on desktop — cancelled out below 760px so it
+   doesn't strand that one control alone on the right of its own wrapped
+   line while everything else stays left-aligned. */
+.rec-tools-push{margin-left:auto}
 .dtable-wrap{display:block}
 .dtable{width:100%;border-collapse:collapse}
 .dtable th{text-align:left;padding:10px 16px;font-family:var(--font-mono);font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-400);border-bottom:1px solid var(--ink-100);white-space:nowrap}
@@ -142,7 +147,7 @@ a.nav-i:hover,a.mnav-i:hover,a.sheet-i:hover,a.row:hover{color:var(--ink-700);bo
 .ccard-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px;padding-top:10px;border-top:1px solid var(--ink-100)}
 .ccard-stat{display:flex;flex-direction:column;gap:3px;min-width:0}
 .rec-empty{padding:48px 24px;text-align:center;color:var(--ink-400);font-size:14.5px}
-@media(max-width:760px){.dtable-wrap{display:none}.ccards{display:flex}.rec-tools{flex-wrap:wrap}.rec-tools .search{flex:1 0 100%;max-width:none}}
+@media(max-width:760px){.dtable-wrap{display:none}.ccards{display:flex}.rec-tools{flex-wrap:wrap}.rec-tools .search{flex:1 0 100%;max-width:none}.rec-tools-push{margin-left:0}}
 
 /* forms */
 .form{display:flex;flex-direction:column;gap:20px;max-width:640px}

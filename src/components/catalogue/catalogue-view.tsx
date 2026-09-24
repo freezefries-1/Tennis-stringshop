@@ -52,7 +52,7 @@ export function CatalogueView({ models, brands }: { models: RacketModelWithNames
           <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
           Show archived
         </label>
-        <Link href="/catalogue/brands" style={{ fontSize: 13.5, color: "var(--court-600)", whiteSpace: "nowrap", marginLeft: "auto" }}>
+        <Link href="/catalogue/brands" className="rec-tools-push" style={{ fontSize: 13.5, color: "var(--court-600)", whiteSpace: "nowrap" }}>
           Manage brands &amp; series
         </Link>
       </div>

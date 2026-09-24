@@ -165,7 +165,7 @@ export function JobsView({ jobs, stats }: { jobs: JobListRow[]; stats: JobStats 
           <option value="overdue">Overdue</option>
           <option value="none">No due date</option>
         </select>
-        <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)} style={{ ...selectStyle(), marginLeft: "auto" }}>
+        <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)} className="rec-tools-push" style={selectStyle()}>
           <option value="receivedOn">Sort: date received</option>
           <option value="dueOn">Sort: due date</option>
           <option value="status">Sort: status</option>
