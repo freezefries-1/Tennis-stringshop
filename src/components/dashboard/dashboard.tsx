@@ -11,8 +11,7 @@ import { ProgressBar } from "@/components/ds/progress-bar";
 import { SpecList, type SpecListItem } from "@/components/ds/spec-list";
 import { StatBlock } from "@/components/ds/stat-block";
 import { DateRangePicker } from "@/components/reports/date-range-picker";
-import { DATA } from "@/lib/data";
-import { formatMoney0, formatCents, formatCentsSigned, formatDate } from "@/lib/format";
+import { formatMoney0, formatCents, formatCentsSigned, formatDate, formatDateWithWeekday } from "@/lib/format";
 import type { RecentMovementRow } from "@/lib/string-inventory";
 import type { DashboardSalesStats, RecentSaleRow } from "@/lib/sales";
 import type { FinancialSummary, SalesSplit, PeriodComparison } from "@/lib/financials";
@@ -410,7 +409,7 @@ export function Dashboard({
   return (
     <div className="dash">
       <div className="sec-head">
-        <div className="lab">Today · {DATA.business.today}</div>
+        <div className="lab">Today · {formatDateWithWeekday(new Date())}</div>
         <div className="hair" />
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16 }}>

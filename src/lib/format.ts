@@ -22,3 +22,9 @@ export function formatDate(d: Date | string | null | undefined): string {
   return new Date(d).toLocaleDateString("en-SG", { day: "numeric", month: "short", year: "numeric" });
 }
 
+export function formatDateWithWeekday(d: Date | string): string {
+  const date = new Date(d);
+  const weekday = date.toLocaleDateString("en-SG", { weekday: "short" });
+  return `${weekday} ${formatDate(date)}`;
+}
+
