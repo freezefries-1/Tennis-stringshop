@@ -24,7 +24,7 @@ export function Tabs({ items, value, defaultValue, onChange, style, ...rest }: T
     onChange?.(v);
   };
   return (
-    <div role="tablist" style={{ display: "flex", gap: 2, borderBottom: "1px solid var(--border-hairline)", ...style }} {...rest}>
+    <div role="tablist" style={{ display: "flex", gap: 2, borderBottom: "1px solid var(--border-hairline)", overflowX: "auto", overflowY: "hidden", WebkitOverflowScrolling: "touch", ...style }} {...rest}>
       {items.map((it) => {
         const on = current === it.value;
         return (

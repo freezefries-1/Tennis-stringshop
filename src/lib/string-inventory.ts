@@ -250,16 +250,44 @@ export interface InventorySummary {
 }
 
 /** Inventory value is the remaining value of every batch (remaining ×
- * cost-per-unit), never quantity × latest purchase price (brief §30). */
+ * cost-per-unit), never quantity × latest purchase price (brief §30).
+ *
+ * Rewritten (Phase 8) from a full-catalogue fetch (listStringProducts({}) +
+ * JS filtering) to SQL-side aggregation — same fix as listLowStockProducts
+ * already got; this summary function was still doing it. Per-product
+ * available/threshold is one grouped query (same expressions
+ * listLowStockProducts uses), leaving only a handful of already-summarized
+ * rows to reduce over in JS, not the raw batch/movement history. */
 export async function getInventorySummary(): Promise<InventorySummary> {
-  const products = await listStringProducts({});
+  const defaults = await getInventoryDefaults();
+  const defaultThreshold = sql`case when ${stringProducts.trackingUnit} = 'set' then ${defaults.lowStockThresholdSets}::numeric else ${defaults.lowStockThresholdM}::numeric end`;
+  const rows = await db
+    .select({
+      available: sql<string>`coalesce(sum(${stringInventoryBatches.remainingQuantity}) filter (where ${stringInventoryBatches.remainingQuantity} > 0), 0)`,
+      threshold: sql<string>`coalesce(${stringProducts.lowStockThreshold}, ${defaultThreshold})`,
+    })
+    .from(stringProducts)
+    .leftJoin(stringInventoryBatches, eq(stringInventoryBatches.stringProductId, stringProducts.id))
+    .where(isNull(stringProducts.archivedAt))
+    .groupBy(stringProducts.id, stringProducts.trackingUnit, stringProducts.lowStockThreshold);
+
   const [valueRow] = await db
     .select({ value: sql<string>`coalesce(sum(${stringInventoryBatches.remainingQuantity} * ${stringInventoryBatches.costPerUnitCents}), 0)` })
     .from(stringInventoryBatches);
+
+  let lowStockCount = 0;
+  let outOfStockCount = 0;
+  for (const r of rows) {
+    const available = Number(r.available);
+    const threshold = Number(r.threshold);
+    if (available <= 0) outOfStockCount++;
+    else if (available <= threshold) lowStockCount++;
+  }
+
   return {
-    totalProducts: products.length,
-    lowStockCount: products.filter((p) => p.status === "low_stock").length,
-    outOfStockCount: products.filter((p) => p.status === "out_of_stock").length,
+    totalProducts: rows.length,
+    lowStockCount,
+    outOfStockCount,
     inventoryValueCents: Math.round(Number(valueRow?.value ?? 0) / 100),
   };
 }

@@ -293,15 +293,43 @@ export interface InventorySummary {
   inventoryValueCents: number;
 }
 
+/** Rewritten (Phase 8) from a full-catalogue fetch (listProducts({}) +
+ * JS filtering) to SQL-side aggregation — same anti-pattern class as the
+ * dashboard's original low-stock queries (see migration 0015's report) and
+ * this function was still live on /inventory doing it. Per-product
+ * available/threshold/tracked is computed in one grouped query (mirroring
+ * listLowStockProducts' own expressions below), leaving only a handful of
+ * already-summarized rows — one per product, not one per batch/movement —
+ * to reduce over in JS. */
 export async function getInventorySummary(): Promise<InventorySummary> {
-  const rows = await listProducts({});
+  const defaults = await getInventoryDefaults();
+  const rows = await db
+    .select({
+      trackInventory: products.trackInventory,
+      available: sql<number>`coalesce(sum(${productInventoryBatches.remainingQuantity}) filter (where ${productInventoryBatches.remainingQuantity} > 0), 0)::int`,
+      threshold: sql<number>`coalesce(${products.lowStockThreshold}, ${defaults.lowStockThresholdUnits})::int`,
+    })
+    .from(products)
+    .leftJoin(productInventoryBatches, eq(productInventoryBatches.productId, products.id))
+    .where(isNull(products.archivedAt))
+    .groupBy(products.id, products.trackInventory, products.lowStockThreshold);
+
   const [valueRow] = await db
     .select({ value: sql<string>`coalesce(sum(${productInventoryBatches.remainingQuantity} * ${productInventoryBatches.costPerUnitCents}), 0)` })
     .from(productInventoryBatches);
+
+  let lowStockCount = 0;
+  let outOfStockCount = 0;
+  for (const r of rows) {
+    if (!r.trackInventory) continue;
+    if (r.available <= 0) outOfStockCount++;
+    else if (r.available <= r.threshold) lowStockCount++;
+  }
+
   return {
     totalProducts: rows.length,
-    lowStockCount: rows.filter((r) => r.status === "low_stock").length,
-    outOfStockCount: rows.filter((r) => r.status === "out_of_stock").length,
+    lowStockCount,
+    outOfStockCount,
     inventoryValueCents: Math.round(Number(valueRow?.value ?? 0) / 100),
   };
 }

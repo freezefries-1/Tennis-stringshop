@@ -1,18 +1,21 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { Card } from "@/components/ds/card";
 import { Button } from "@/components/ds/button";
 import { Badge } from "@/components/ds/badge";
+import { Icon } from "@/components/ds/icon";
 import { ProgressBar } from "@/components/ds/progress-bar";
 import { SpecList, type SpecListItem } from "@/components/ds/spec-list";
 import { StatBlock } from "@/components/ds/stat-block";
+import { DateRangePicker } from "@/components/reports/date-range-picker";
 import { DATA } from "@/lib/data";
 import { formatMoney0, formatCents, formatCentsSigned, formatDate } from "@/lib/format";
 import type { RecentMovementRow } from "@/lib/string-inventory";
 import type { DashboardSalesStats, RecentSaleRow } from "@/lib/sales";
-import type { FinancialSummary } from "@/lib/financials";
+import type { FinancialSummary, SalesSplit, PeriodComparison } from "@/lib/financials";
 import type { ExpenseListRow } from "@/lib/expenses";
 
 function PanelHead({ label, title, action }: { label: string; title?: string; action?: ReactNode }) {
@@ -29,8 +32,11 @@ function PanelHead({ label, title, action }: { label: string; title?: string; ac
 
 /** Real Sales/Expenses figures (Phase 7) — no separate month/year tables,
  * this is the same getFinancialSummary() Financials page uses, just scoped
- * to whatever range the dashboard page passed in. */
-function PL({ d, label }: { d: FinancialSummary; label: string }) {
+ * to whatever range the dashboard page passed in. Phase 8 adds Outstanding
+ * and Other income (§4's minimum card set) and, where a previous period
+ * exists, a Net profit delta (§3) — never an independently-recomputed
+ * formula, just getPeriodComparison's own figures. */
+function PL({ d, label, comparison }: { d: FinancialSummary; label: string; comparison?: PeriodComparison }) {
   const items: SpecListItem[] = [
     { label: "Revenue", value: <span className="num">{formatCents(d.netSalesRevenueCents)}</span> },
     { label: "COGS", value: <span className="num" style={{ color: "var(--ink-500)" }}>−{formatCents(d.cogsCents)}</span> },
@@ -43,7 +49,10 @@ function PL({ d, label }: { d: FinancialSummary; label: string }) {
       ),
     },
     { label: "Expenses", value: <span className="num" style={{ color: "var(--ink-500)" }}>−{formatCents(d.operatingExpensesCents)}</span> },
+    { label: "Other income", value: <span className="num">{formatCents(d.otherIncomeCents)}</span> },
+    { label: "Outstanding", value: <span className="num">{formatCents(d.outstandingCents)}</span> },
   ];
+  const net = comparison?.netProfit;
   return (
     <Card padding="20px 24px 24px">
       <PanelHead label={label} />
@@ -54,89 +63,13 @@ function PL({ d, label }: { d: FinancialSummary; label: string }) {
           {formatCentsSigned(d.netProfitCents)}
         </span>
       </div>
-    </Card>
-  );
-}
-
-function RevenueChart() {
-  const rows = DATA.monthly;
-  const max = Math.max(...rows.map((r) => r.rev));
-  const jmax = Math.max(...rows.map((r) => r.jobs));
-  const jmin = Math.min(...rows.map((r) => r.jobs));
-  const pts = rows
-    .map((r, i) => `${(i + 0.5) * (100 / rows.length)},${34 - ((r.jobs - jmin) / (jmax - jmin || 1)) * 28}`)
-    .join(" ");
-  return (
-    <Card padding="20px 24px 22px">
-      <PanelHead
-        label="Last 12 months"
-        title="Revenue and gross profit"
-        action={
-          <div className="legend">
-            <span>
-              <i style={{ background: "var(--court-600)" }} />
-              Gross profit
-            </span>
-            <span>
-              <i style={{ background: "var(--court-100)" }} />
-              COGS
-            </span>
-          </div>
-        }
-      />
-      <div className="bars">
-        {rows.map((r) => (
-          <div className="bar-col" key={r.m} title={`${r.m} · ${formatMoney0(r.rev)} revenue`}>
-            <div className="bar-v num">{Math.round(r.rev / 100) / 10}k</div>
-            <div className="bar-track">
-              <div className="bar" style={{ height: (r.rev / max) * 100 + "%" }}>
-                <div className="bar-cogs" style={{ height: (r.cogs / r.rev) * 100 + "%" }} />
-              </div>
-            </div>
-            <div className="bar-x num">{r.m.slice(0, 3)}</div>
-          </div>
-        ))}
-      </div>
-      <div className="spark-wrap">
-        <div className="lab" style={{ marginBottom: 6 }}>
-          String jobs per month · {jmin}–{jmax}
+      {net && net.changePct !== null ? (
+        <div className="row-s num" style={{ marginTop: 8, color: net.changeCents >= 0 ? "var(--signal-success)" : "var(--signal-danger)" }}>
+          {net.changeCents >= 0 ? "+" : ""}
+          {formatCents(net.changeCents)} / {net.changePct >= 0 ? "+" : ""}
+          {net.changePct.toFixed(1)}% vs previous period ({formatCentsSigned(net.previous)})
         </div>
-        <svg viewBox="0 0 100 38" preserveAspectRatio="none" className="spark">
-          <polyline points={pts} fill="none" stroke="var(--clay-500)" strokeWidth="1.1" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
-        </svg>
-      </div>
-    </Card>
-  );
-}
-
-interface BarListRow {
-  label: string;
-  v: number;
-  dot?: string;
-  fill?: string;
-}
-
-function BarList({ label, title, rows, valueFmt }: { label: string; title: string; rows: BarListRow[]; valueFmt: (r: BarListRow) => string }) {
-  const max = Math.max(...rows.map((r) => r.v));
-  return (
-    <Card padding="20px 24px 22px">
-      <PanelHead label={label} title={title} />
-      <div className="blist">
-        {rows.map((r) => (
-          <div className="blist-row" key={r.label}>
-            <div className="blist-top">
-              <span className="blist-l">
-                {r.dot ? <i className="dot" style={{ background: r.dot }} /> : null}
-                {r.label}
-              </span>
-              <span className="num blist-v">{valueFmt(r)}</span>
-            </div>
-            <div className="blist-track">
-              <div style={{ width: (r.v / max) * 100 + "%", background: r.fill || "var(--court-600)" }} />
-            </div>
-          </div>
-        ))}
-      </div>
+      ) : null}
     </Card>
   );
 }
@@ -428,6 +361,11 @@ export function Dashboard({
   recentSales,
   monthFinancials,
   recentExpenses,
+  salesSplit,
+  stringJobCount,
+  comparison,
+  initialFrom,
+  initialTo,
 }: {
   lowStock: MergedLowStockRow[];
   recentMovements: RecentMovementRow[];
@@ -435,23 +373,29 @@ export function Dashboard({
   recentSales: RecentSaleRow[];
   monthFinancials: FinancialSummary;
   recentExpenses: ExpenseListRow[];
+  salesSplit: SalesSplit;
+  stringJobCount: number;
+  comparison: PeriodComparison;
+  initialFrom: string;
+  initialTo: string;
 }) {
   const t = DATA.today;
+  const mixTotal = salesSplit.stringing.revenueCents + salesSplit.retail.revenueCents + salesSplit.other.revenueCents;
   return (
     <div className="dash">
       <div className="sec-head">
         <div className="lab">Today · {DATA.business.today}</div>
         <div className="hair" />
       </div>
-      <div className="g4">
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16 }}>
         <Card>
-          <StatBlock label="Sales revenue" value={formatMoney0(salesStats.todayRevenueCents / 100)} icon="banknote" />
-          <div className="row-s num" style={{ marginTop: 12 }}>
-            This month {formatCents(monthFinancials.netSalesRevenueCents)} · net profit {formatCentsSigned(monthFinancials.netProfitCents)}
-          </div>
+          <StatBlock label="Sales revenue (today)" value={formatMoney0(salesStats.todayRevenueCents / 100)} icon="banknote" />
         </Card>
         <Card>
-          <StatBlock label="String jobs" value={t.jobs} unit="done" icon="wrench" />
+          <StatBlock label="String jobs (period)" value={stringJobCount} icon="wrench" />
+        </Card>
+        <Card>
+          <StatBlock label="Retail sales (period)" value={formatCents(salesSplit.retail.revenueCents)} icon="package" />
         </Card>
         <Card>
           <StatBlock label="Unpaid sales" value={salesStats.unpaidSalesCount} unit="sales" icon="banknote" />
@@ -468,36 +412,91 @@ export function Dashboard({
       </div>
 
       <div className="sec-head">
+        <div className="lab">Period</div>
+        <div className="hair" />
+      </div>
+      <DateRangePicker basePath="/dashboard" initialFrom={initialFrom} initialTo={initialTo} />
+
+      <div className="sec-head">
         <div className="lab">Profit and loss</div>
         <div className="hair" />
       </div>
       <div className="g1">
-        <PL d={monthFinancials} label="This month" />
+        <PL d={monthFinancials} label="Selected period" comparison={comparison} />
       </div>
 
-      <div className="g1">
-        <RevenueChart />
+      <div className="sec-head">
+        <div className="lab">Charts</div>
+        <div className="hair" />
       </div>
-
       <div className="g3">
-        <BarList
-          label="Year to date"
-          title="Revenue by category"
-          rows={DATA.categories.map((c) => ({ label: c.label, v: c.value, fill: c.tone }))}
-          valueFmt={(r) => formatMoney0(r.v)}
-        />
-        <BarList
-          label="Year to date"
-          title="Most-used strings"
-          rows={DATA.topStrings.map((s) => ({ label: s.label, v: s.metres, dot: s.family, fill: "var(--court-500)" }))}
-          valueFmt={(r) => r.v + " m"}
-        />
-        <BarList
-          label="Year to date"
-          title="Best-selling products"
-          rows={DATA.topProducts.map((p) => ({ label: p.label, v: p.rev, fill: "var(--clay-500)" }))}
-          valueFmt={(r) => formatMoney0(r.v)}
-        />
+        <Card padding="18px" style={{ minWidth: 0 }}>
+          <div className="lab" style={{ marginBottom: 12 }}>
+            Revenue mix
+          </div>
+          {mixTotal === 0 ? (
+            <div className="row-s">No sales in this period.</div>
+          ) : (
+            <>
+              {[
+                { label: "Stringing", v: salesSplit.stringing.revenueCents, fill: "var(--court-600)" },
+                { label: "Retail", v: salesSplit.retail.revenueCents, fill: "var(--clay-500)" },
+                ...(salesSplit.other.revenueCents !== 0 ? [{ label: "Other", v: salesSplit.other.revenueCents, fill: "var(--ink-400)" }] : []),
+              ].map((row) => (
+                <div key={row.label} style={{ marginBottom: 10 }}>
+                  <div className="row-s" style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span>{row.label}</span>
+                    <span className="num">{formatCents(row.v)}</span>
+                  </div>
+                  <div className="blist-track">
+                    <div style={{ width: `${(row.v / mixTotal) * 100}%`, background: row.fill }} />
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+        </Card>
+        <Link href="/reports/financial" style={{ textDecoration: "none", color: "inherit" }}>
+          <Card interactive padding="18px" style={{ height: "100%", display: "flex", flexDirection: "column", justifyContent: "space-between", minWidth: 0 }}>
+            <div>
+              <div className="lab" style={{ marginBottom: 8 }}>
+                Revenue &amp; profit trend
+              </div>
+              <div className="row-s">Monthly revenue, gross profit and net profit — see the full 12-month table in Reports.</div>
+            </div>
+            <div className="row-s" style={{ color: "var(--court-600)", display: "flex", alignItems: "center", gap: 4, marginTop: 12 }}>
+              View in Reports <Icon name="arrow-right" size={14} />
+            </div>
+          </Card>
+        </Link>
+        <Link href="/reports/financial" style={{ textDecoration: "none", color: "inherit" }}>
+          <Card interactive padding="18px" style={{ height: "100%", display: "flex", flexDirection: "column", justifyContent: "space-between", minWidth: 0 }}>
+            <div>
+              <div className="lab" style={{ marginBottom: 8 }}>
+                Expenses by category
+              </div>
+              <div className="row-s">Where operating expenses are going this period — see the full breakdown in Reports.</div>
+            </div>
+            <div className="row-s" style={{ color: "var(--court-600)", display: "flex", alignItems: "center", gap: 4, marginTop: 12 }}>
+              View in Reports <Icon name="arrow-right" size={14} />
+            </div>
+          </Card>
+        </Link>
+      </div>
+      <div className="g3">
+        <Link href="/reports/stringing" style={{ textDecoration: "none", color: "inherit" }}>
+          <Card interactive padding="18px" style={{ height: "100%", display: "flex", flexDirection: "column", justifyContent: "space-between", minWidth: 0 }}>
+            <div>
+              <div className="lab" style={{ marginBottom: 8 }}>
+                String jobs trend
+              </div>
+              <div className="row-s">Monthly job volume — see the full trend and string usage breakdown in Reports.</div>
+            </div>
+            <div className="row-s" style={{ color: "var(--court-600)", display: "flex", alignItems: "center", gap: 4, marginTop: 12 }}>
+              View in Reports <Icon name="arrow-right" size={14} />
+            </div>
+          </Card>
+        </Link>
       </div>
 
       <div className="sec-head">

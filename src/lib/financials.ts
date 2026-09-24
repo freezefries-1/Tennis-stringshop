@@ -4,6 +4,8 @@ import { sales, saleItems, expenses, otherIncome } from "@/db/schema";
 import { getSalesSummary, type SalesFilters } from "./sales";
 import { getExpenseSummary, type ExpenseCategoryAmount } from "./expenses";
 import { getOtherIncomeTotalCents } from "./other-income";
+import { previousPeriod, safePctChange } from "./date-filter";
+import { toCsv } from "./csv";
 
 // -- the P&L formulas (read this before editing) ----------------------------
 //
@@ -405,4 +407,77 @@ export async function getMonthlyTrend(monthsBack = 6, endYear?: number, endMonth
       netProfitCents,
     };
   });
+}
+
+// -- period comparison (Phase 8 §3/§12/§54) ----------------------------------
+
+export interface ComparisonFigure {
+  current: number;
+  previous: number;
+  changeCents: number;
+  /** null when previous is zero/negative or there's no previous period
+   * (All time) — see safePctChange. Never Infinity/NaN. */
+  changePct: number | null;
+}
+
+export interface PeriodComparison {
+  hasPrevious: boolean;
+  revenue: ComparisonFigure;
+  cogs: ComparisonFigure;
+  grossProfit: ComparisonFigure;
+  operatingExpenses: ComparisonFigure;
+  netProfit: ComparisonFigure;
+}
+
+function figure(current: number, previous: number): ComparisonFigure {
+  return { current, previous, changeCents: current - previous, changePct: safePctChange(current, previous) };
+}
+
+/** Current period vs the immediately preceding period of the same length
+ * (September vs August, Q3 vs Q2, this year vs last year — Phase 8 §12).
+ * Built entirely on getFinancialSummary, the same function Dashboard and
+ * Financials already call, so a comparison card can never disagree with
+ * either about what "this period's revenue" means. All time (dateFrom/
+ * dateTo both null) has no previous period by definition — hasPrevious is
+ * false and every previous figure is 0 with changePct null, never a
+ * fabricated comparison. */
+// Accepts an already-fetched `current` summary — a caller that also needs
+// the full FinancialSummary for its own P&L card (the Dashboard, most
+// notably) would otherwise trigger getFinancialSummary twice for the same
+// period (itself ~10 DB round trips), stacking connection load right back
+// onto the page the earlier 504 fix was specifically about. Reports/
+// financial doesn't have its own copy handy, so it omits this and gets the
+// original one-call-does-everything behaviour.
+export async function getPeriodComparison(filters: FinancialsFilters, current?: FinancialSummary): Promise<PeriodComparison> {
+  const [prevFrom, prevTo] = previousPeriod(filters.dateFrom ?? null, filters.dateTo ?? null);
+  const hasPrevious = prevFrom !== null && prevTo !== null;
+
+  const [currentSummary, previous] = await Promise.all([
+    current ? Promise.resolve(current) : getFinancialSummary(filters),
+    hasPrevious ? getFinancialSummary({ dateFrom: prevFrom, dateTo: prevTo }) : Promise.resolve(null),
+  ]);
+
+  const zero = { netSalesRevenueCents: 0, cogsCents: 0, grossProfitCents: 0, operatingExpensesCents: 0, netProfitCents: 0 };
+  const p = previous ?? zero;
+
+  return {
+    hasPrevious,
+    revenue: figure(currentSummary.netSalesRevenueCents, p.netSalesRevenueCents),
+    cogs: figure(currentSummary.cogsCents, p.cogsCents),
+    grossProfit: figure(currentSummary.grossProfitCents, p.grossProfitCents),
+    operatingExpenses: figure(currentSummary.operatingExpensesCents, p.operatingExpensesCents),
+    netProfit: figure(currentSummary.netProfitCents, p.netProfitCents),
+  };
+}
+
+/** Monthly Financial Performance export (Phase 8 §41) — same rows
+ * getMonthlyTrend returns, so the export always matches what the Reports
+ * page shows. monthsBack, not a date range, since this report is inherently
+ * a fixed trailing window rather than an arbitrary [from, to). */
+export async function exportMonthlyTrendCsv(monthsBack = 12): Promise<string> {
+  const rows = await getMonthlyTrend(monthsBack);
+  return toCsv(
+    ["Month", "Net revenue (cents)", "COGS (cents)", "Gross profit (cents)", "Operating expenses (cents)", "Other income (cents)", "Net profit (cents)"],
+    rows.map((r) => [r.label, r.netSalesRevenueCents, r.cogsCents, r.grossProfitCents, r.operatingExpensesCents, r.otherIncomeCents, r.netProfitCents]),
+  );
 }

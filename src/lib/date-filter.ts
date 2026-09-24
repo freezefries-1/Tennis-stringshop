@@ -24,6 +24,15 @@ export const DATE_FILTER_LABEL: Record<DateFilterPreset, string> = {
   custom: "Custom range",
 };
 
+/** Every Reports page's server component does exactly this: `sp.from`/
+ * `sp.to` are full ISO instants (the client resolves "this month" etc. in
+ * local time and serializes the exact boundary — see DateRangePicker),
+ * parsed unambiguously regardless of where the server itself runs. Missing
+ * means All time (both null), matching Financials' own convention. */
+export function resolveDateParams(sp: { from?: string; to?: string }): { dateFrom: Date | null; dateTo: Date | null } {
+  return { dateFrom: sp.from ? new Date(sp.from) : null, dateTo: sp.to ? new Date(sp.to) : null };
+}
+
 export function pad(n: number): string {
   return String(n).padStart(2, "0");
 }
@@ -106,4 +115,34 @@ export function detectPreset(fromISO: string, toISO: string): DateFilterPreset {
     if ((s?.toISOString() ?? "") === fromISO && (e?.toISOString() ?? "") === toISO) return f;
   }
   return "custom";
+}
+
+// -- period comparison (Phase 8 §3/§12/§54) ----------------------------------
+//
+// "Compare to the previous equivalent period" — September vs August, Q3 vs
+// Q2, this year vs last year. Always computed by shifting the CURRENT
+// [start, end) window back by its own exact length, never by re-resolving a
+// different preset — a custom 17-day range's "previous period" is the 17
+// days immediately before it, not "last month". "All time" has no
+// meaningful previous period (there's nothing before it by definition) and
+// returns [null, null].
+
+/** [start, end) immediately preceding [from, to), the same length. Null in
+ * either input (All time, or Custom with a date still blank) means there's
+ * no well-defined previous period either. */
+export function previousPeriod(from: Date | null, to: Date | null): [Date | null, Date | null] {
+  if (!from || !to) return [null, null];
+  const lengthMs = to.getTime() - from.getTime();
+  return [new Date(from.getTime() - lengthMs), from];
+}
+
+/** Percentage change from `previous` to `current`, or null when it can't be
+ * expressed meaningfully — previous is zero (division by zero) or previous
+ * is negative (a "% change" against a negative base is not a number anyone
+ * reads sensibly). Callers show "—" for null, never Infinity/NaN/a
+ * fabricated 0%. See Phase 8 §3/§54 — this is the one place that decision
+ * is made, so every comparison card agrees on when a percentage is shown. */
+export function safePctChange(current: number, previous: number): number | null {
+  if (previous <= 0) return null;
+  return ((current - previous) / previous) * 100;
 }
