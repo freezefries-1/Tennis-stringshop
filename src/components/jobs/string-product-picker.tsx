@@ -132,10 +132,14 @@ export function StringProductPicker({
   if (selectedId) {
     return (
       <Field label="String">
-        <div style={{ display: "flex", alignItems: "center", gap: 8, height: 38, padding: "0 12px", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", background: "var(--paper-100)" }}>
-          <span style={{ flex: 1, fontSize: 15 }}>{selectedLabel || "Selected string"}</span>
-          {selectedUnit ? <Badge tone="neutral">{selectedUnit === "set" ? "Set" : "Reel"}</Badge> : null}
-          <button type="button" onClick={() => onSelect(null)} style={{ border: "none", background: "none", color: "var(--ink-400)", cursor: "pointer", fontSize: 13 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 8, minHeight: 38, padding: "9px 12px", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", background: "var(--paper-100)" }}>
+          <span style={{ flex: 1, fontSize: 15, lineHeight: 1.35 }}>{selectedLabel || "Selected string"}</span>
+          {selectedUnit ? (
+            <span style={{ flexShrink: 0, marginTop: 1 }}>
+              <Badge tone="neutral">{selectedUnit === "set" ? "Set" : "Reel"}</Badge>
+            </span>
+          ) : null}
+          <button type="button" onClick={() => onSelect(null)} style={{ flexShrink: 0, border: "none", background: "none", color: "var(--ink-400)", cursor: "pointer", fontSize: 13, lineHeight: 1.35 }}>
             Change
           </button>
         </div>

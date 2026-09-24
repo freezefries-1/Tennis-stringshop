@@ -43,10 +43,10 @@ export function Combobox<T>({
   if (selected) {
     return (
       <Field label={label}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, height: 38, padding: "0 12px", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", background: "var(--paper-100)" }}>
-          <span style={{ flex: 1, fontSize: 15 }}>{getLabel(selected)}</span>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 8, minHeight: 38, padding: "9px 12px", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", background: "var(--paper-100)" }}>
+          <span style={{ flex: 1, fontSize: 15, lineHeight: 1.35 }}>{getLabel(selected)}</span>
           {!disabled ? (
-            <button type="button" onClick={() => onSelect(null)} style={{ border: "none", background: "none", color: "var(--ink-400)", cursor: "pointer", fontSize: 13 }}>
+            <button type="button" onClick={() => onSelect(null)} style={{ flexShrink: 0, border: "none", background: "none", color: "var(--ink-400)", cursor: "pointer", fontSize: 13, lineHeight: 1.35 }}>
               Change
             </button>
           ) : null}
