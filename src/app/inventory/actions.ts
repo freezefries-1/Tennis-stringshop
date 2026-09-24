@@ -14,6 +14,7 @@ import {
   recordManualAdjustment,
   updateBatchCost,
   InsufficientStockError,
+  BatchQuantityCorrectionError,
   exportStringProductsCsv,
   exportBatchesCsv,
   exportMovementsCsv,
@@ -112,7 +113,14 @@ export async function recordManualAdjustmentAction(input: ManualAdjustmentInput,
 }
 
 export async function updateBatchCostAction(input: UpdateBatchCostInput, productId: string) {
-  await updateBatchCost(input);
+  try {
+    await updateBatchCost(input);
+  } catch (err) {
+    if (err instanceof BatchQuantityCorrectionError) {
+      return { status: "invalid_quantity" as const, impliedRemaining: err.impliedRemaining };
+    }
+    throw err;
+  }
   revalidatePath("/inventory");
   revalidatePath(`/inventory/products/${productId}`);
   return { status: "ok" as const };

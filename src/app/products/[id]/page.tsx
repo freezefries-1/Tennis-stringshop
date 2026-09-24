@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getProduct, listBatchesForProduct, listMovementsForProduct } from "@/lib/products";
 import { listSalesForProduct } from "@/lib/sales";
+import { listSuppliers } from "@/lib/string-inventory";
 import { Card } from "@/components/ds/card";
 import { Button } from "@/components/ds/button";
 import { Badge } from "@/components/ds/badge";
@@ -33,7 +34,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
   const product = await getProduct(id);
   if (!product) notFound();
 
-  const [batches, movements, sales] = await Promise.all([listBatchesForProduct(id), listMovementsForProduct(id, 200), listSalesForProduct(id)]);
+  const [batches, movements, sales, suppliers] = await Promise.all([listBatchesForProduct(id), listMovementsForProduct(id, 200), listSalesForProduct(id), listSuppliers()]);
 
   const infoItems: SpecListItem[] = [
     { label: "Brand", value: product.brand ?? "—" },
@@ -113,7 +114,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
               <div className="lab" style={{ marginTop: 20, marginBottom: 8 }}>
                 Adjust stock
               </div>
-              <AdjustStockPanel productId={product.id} batches={batches} />
+              <AdjustStockPanel productId={product.id} batches={batches} suppliers={suppliers} />
             </>
           ) : null}
         </Card>

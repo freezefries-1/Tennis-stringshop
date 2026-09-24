@@ -559,31 +559,80 @@ export async function recordManualAdjustment(input: ManualAdjustmentInput): Prom
 export interface UpdateBatchCostInput {
   batchId: string;
   purchaseCostCents: number;
+  /** Optional correction to how much this batch actually received (e.g.
+   * "200m" typed instead of "20m" at receipt). Distinct from a Stock
+   * correction (which only ever adjusts remaining quantity, because
+   * finding/losing/miscounting stock never changes what you originally
+   * paid per unit): this corrects the RECEIPT itself, so cost-per-unit
+   * recomputes from it. remainingQuantity shifts by the same delta as
+   * originalQuantity, so length already used from this batch stays
+   * correctly accounted for. Omitted/unchanged means only the cost (and/or
+   * the metadata fields below) is being corrected. */
+  originalQuantity?: string;
+  /** Pure metadata — never affects quantity/cost math, so these are just
+   * applied directly with no ledger note beyond the one already written
+   * for a quantity/cost change (or their own bare correction entry if nothing
+   * else changed). */
+  purchaseDate?: string;
+  supplierId?: string | null;
+  supplierReference?: string | null;
+  notes?: string | null;
   reason: string;
 }
 
-/** Corrects a batch's purchase cost after the fact (e.g. a typo at receipt)
- * — cost-per-unit is recalculated from the batch's ORIGINAL quantity (it's
- * a property of the whole purchase, not of whatever happens to remain
- * today) and only affects allocations made from this point on. A job
- * already completed against this batch keeps its own stored
+/** Thrown when a received-quantity correction would imply less was ever
+ * received than has already been used from this batch — the correction
+ * itself must be wrong, not just applied and clamped. Mirrors products.ts's
+ * BatchQuantityCorrectionError (kept as its own class, not shared, since
+ * string/product inventory are deliberately separate domains throughout
+ * this codebase). */
+export class BatchQuantityCorrectionError extends Error {
+  constructor(public impliedRemaining: number) {
+    super(`This correction would leave ${impliedRemaining} remaining, which isn't possible — some has already been used from this batch.`);
+  }
+}
+
+/** Corrects a batch's purchase cost, received quantity, and/or descriptive
+ * details (date/supplier/reference/notes) after the fact. Cost-per-unit is
+ * recalculated from the batch's (possibly now-corrected) ORIGINAL quantity
+ * — it's a property of the whole purchase, not of whatever happens to
+ * remain today — and only affects allocations made from this point on. A
+ * job already completed against this batch keeps its own stored
  * costPerUnitSnapshot/cogsAmountCents exactly as they were — historical
- * COGS is never recalculated (brief §27). Logs a zero-quantity
- * "correction" movement so the change stays visible in the batch's own
- * history, same required-reason pattern as recordManualAdjustment. */
+ * COGS is never recalculated (brief §27). Logs a "correction" movement
+ * (with the actual quantity delta, zero if only cost/metadata changed) so
+ * the change stays visible in the batch's own history, same required-
+ * reason pattern as recordManualAdjustment. */
 export async function updateBatchCost(input: UpdateBatchCostInput): Promise<StringInventoryBatch> {
   return db.transaction(async (tx) => {
     const [batch] = await tx.select().from(stringInventoryBatches).where(eq(stringInventoryBatches.id, input.batchId)).for("update");
     if (!batch) throw new Error("Batch not found");
 
-    const originalQuantity = Number(batch.originalQuantity);
-    const newCostPerUnitCents = originalQuantity > 0 ? input.purchaseCostCents / originalQuantity : 0;
+    const oldOriginalQuantity = Number(batch.originalQuantity);
+    const newOriginalQuantity = input.originalQuantity != null ? Number(input.originalQuantity) : oldOriginalQuantity;
+    if (newOriginalQuantity <= 0) throw new Error("Original quantity must be greater than zero.");
+    const quantityDelta = newOriginalQuantity - oldOriginalQuantity;
+    const newRemainingQuantity = Number(batch.remainingQuantity) + quantityDelta;
+    if (newRemainingQuantity < 0) throw new BatchQuantityCorrectionError(newRemainingQuantity);
+
+    const newCostPerUnitCents = newOriginalQuantity > 0 ? input.purchaseCostCents / newOriginalQuantity : 0;
     const oldDollars = (batch.purchaseCostCents / 100).toFixed(2);
     const newDollars = (input.purchaseCostCents / 100).toFixed(2);
+    const quantityNote = quantityDelta !== 0 ? ` Received quantity corrected: ${oldOriginalQuantity} → ${newOriginalQuantity}.` : "";
 
     const [updated] = await tx
       .update(stringInventoryBatches)
-      .set({ purchaseCostCents: input.purchaseCostCents, costPerUnitCents: newCostPerUnitCents.toFixed(4) })
+      .set({
+        purchaseCostCents: input.purchaseCostCents,
+        originalQuantity: newOriginalQuantity.toFixed(2),
+        remainingQuantity: newRemainingQuantity.toFixed(2),
+        costPerUnitCents: newCostPerUnitCents.toFixed(4),
+        status: newRemainingQuantity > 0 ? "active" : "depleted",
+        purchaseDate: input.purchaseDate ?? batch.purchaseDate,
+        supplierId: input.supplierId !== undefined ? input.supplierId : batch.supplierId,
+        supplierReference: input.supplierReference !== undefined ? input.supplierReference?.trim() || null : batch.supplierReference,
+        notes: input.notes !== undefined ? input.notes?.trim() || null : batch.notes,
+      })
       .where(eq(stringInventoryBatches.id, batch.id))
       .returning();
 
@@ -591,10 +640,10 @@ export async function updateBatchCost(input: UpdateBatchCostInput): Promise<Stri
       stringProductId: batch.stringProductId,
       batchId: batch.id,
       movementType: "correction",
-      quantityChange: "0.00",
+      quantityChange: quantityDelta.toFixed(2),
       unit: batch.unit,
       costPerUnitCentsSnapshot: newCostPerUnitCents.toFixed(4),
-      reason: `Purchase cost corrected: $${oldDollars} → $${newDollars} — ${input.reason.trim()}`,
+      reason: `Purchase cost corrected: $${oldDollars} → $${newDollars}.${quantityNote} ${input.reason.trim()}`,
     });
 
     return updated;

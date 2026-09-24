@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { getStringProduct, listBatchesForProduct, listMovementsForProduct } from "@/lib/string-inventory";
+import { getStringProduct, listBatchesForProduct, listMovementsForProduct, listSuppliers } from "@/lib/string-inventory";
 import { Card } from "@/components/ds/card";
 import { Button } from "@/components/ds/button";
 import { Badge } from "@/components/ds/badge";
@@ -30,7 +30,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
   const product = await getStringProduct(id);
   if (!product) notFound();
 
-  const [batches, movements] = await Promise.all([listBatchesForProduct(id), listMovementsForProduct(id, 200)]);
+  const [batches, movements, suppliers] = await Promise.all([listBatchesForProduct(id), listMovementsForProduct(id, 200), listSuppliers()]);
   const unit = product.trackingUnit;
 
   const infoItems: SpecListItem[] = [
@@ -104,7 +104,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
           <div className="lab" style={{ marginTop: 20, marginBottom: 8 }}>
             Adjust stock
           </div>
-          <AdjustStockPanel productId={product.id} batches={batches} unit={unit} />
+          <AdjustStockPanel productId={product.id} batches={batches} unit={unit} suppliers={suppliers} />
         </Card>
       </div>
 

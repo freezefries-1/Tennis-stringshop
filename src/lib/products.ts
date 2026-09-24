@@ -568,6 +568,13 @@ export interface UpdateProductBatchCostInput {
    * corrected to 10 received -> 5 remaining, same 5 sold. Omitted/unchanged
    * means only the cost is being corrected, matching the old behavior. */
   originalQuantity?: number;
+  /** Pure metadata — never affects quantity/cost math, so these are just
+   * applied directly alongside whatever quantity/cost correction (if any)
+   * is also being made in the same edit. */
+  purchaseDate?: string;
+  supplierId?: string | null;
+  supplierReference?: string | null;
+  notes?: string | null;
   reason: string;
 }
 
@@ -609,6 +616,10 @@ export async function updateProductBatchCost(input: UpdateProductBatchCostInput)
         remainingQuantity: newRemainingQuantity,
         costPerUnitCents: newCostPerUnitCents.toFixed(4),
         status: newRemainingQuantity > 0 ? "active" : "depleted",
+        purchaseDate: input.purchaseDate ?? batch.purchaseDate,
+        supplierId: input.supplierId !== undefined ? input.supplierId : batch.supplierId,
+        supplierReference: input.supplierReference !== undefined ? input.supplierReference?.trim() || null : batch.supplierReference,
+        notes: input.notes !== undefined ? input.notes?.trim() || null : batch.notes,
       })
       .where(eq(productInventoryBatches.id, batch.id))
       .returning();
