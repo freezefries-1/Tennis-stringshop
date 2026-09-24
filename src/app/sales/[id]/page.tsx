@@ -135,7 +135,7 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
       <div className="lab" style={{ marginTop: 28, marginBottom: 10 }}>
         Sale items
       </div>
-      <div className="dtable-wrap">
+      <div style={{ overflowX: "auto" }}>
         <Card padding="0">
           <table className="dtable">
             <thead>
@@ -190,7 +190,7 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
           <div className="rec-empty">No inventory-affecting lines on this sale.</div>
         </Card>
       ) : (
-        <div className="dtable-wrap">
+        <div style={{ overflowX: "auto" }}>
           <Card padding="0">
             <table className="dtable">
               <thead>

@@ -116,7 +116,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
           <div className="rec-empty">No batches yet — receive stock to create the first one.</div>
         </Card>
       ) : (
-        <div className="dtable-wrap">
+        <div style={{ overflowX: "auto" }}>
           <Card padding="0">
             <table className="dtable">
               <thead>
@@ -171,7 +171,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
           <div className="rec-empty">No movements yet.</div>
         </Card>
       ) : (
-        <div className="dtable-wrap">
+        <div style={{ overflowX: "auto" }}>
           <Card padding="0">
             <table className="dtable">
               <thead>
