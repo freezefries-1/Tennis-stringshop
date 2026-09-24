@@ -151,26 +151,28 @@ export function InventoryReportsView({
             {stockCover.strings.length === 0 ? (
               <div className="row-s">Not enough recent usage to estimate stock cover.</div>
             ) : (
-              <table className="dtable">
-                <thead>
-                  <tr>
-                    <th>String</th>
-                    <th className="num">Stock</th>
-                    <th className="num">Avg / month</th>
-                    <th className="num">Est. cover</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {stockCover.strings.map((r) => (
-                    <tr key={r.label}>
-                      <td>{r.label}</td>
-                      <td className="num">{r.currentStock}m</td>
-                      <td className="num">{r.avgMonthlyConsumption}m</td>
-                      <td className="num">~{r.estimatedMonthsCover} months</td>
+              <div style={{ overflowX: "auto" }}>
+                <table className="dtable">
+                  <thead>
+                    <tr>
+                      <th>String</th>
+                      <th className="num">Stock</th>
+                      <th className="num">Avg / month</th>
+                      <th className="num">Est. cover</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {stockCover.strings.map((r) => (
+                      <tr key={r.label}>
+                        <td>{r.label}</td>
+                        <td className="num">{r.currentStock}m</td>
+                        <td className="num">{r.avgMonthlyConsumption}m</td>
+                        <td className="num">~{r.estimatedMonthsCover} months</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </Card>
           <Card padding="18px">
@@ -180,26 +182,28 @@ export function InventoryReportsView({
             {stockCover.products.length === 0 ? (
               <div className="row-s">Not enough recent sales to estimate stock cover.</div>
             ) : (
-              <table className="dtable">
-                <thead>
-                  <tr>
-                    <th>Product</th>
-                    <th className="num">Stock</th>
-                    <th className="num">Avg / month</th>
-                    <th className="num">Est. cover</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {stockCover.products.map((r) => (
-                    <tr key={r.label}>
-                      <td>{r.label}</td>
-                      <td className="num">{r.currentStock}</td>
-                      <td className="num">{r.avgMonthlyConsumption}</td>
-                      <td className="num">~{r.estimatedMonthsCover} months</td>
+              <div style={{ overflowX: "auto" }}>
+                <table className="dtable">
+                  <thead>
+                    <tr>
+                      <th>Product</th>
+                      <th className="num">Stock</th>
+                      <th className="num">Avg / month</th>
+                      <th className="num">Est. cover</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {stockCover.products.map((r) => (
+                      <tr key={r.label}>
+                        <td>{r.label}</td>
+                        <td className="num">{r.currentStock}</td>
+                        <td className="num">{r.avgMonthlyConsumption}</td>
+                        <td className="num">~{r.estimatedMonthsCover} months</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </Card>
         </div>

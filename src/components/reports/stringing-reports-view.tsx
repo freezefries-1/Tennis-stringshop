@@ -149,30 +149,32 @@ export function StringingReportsView({
           {brandAnalysis.length === 0 ? (
             <div className="row-s">No string usage in this period.</div>
           ) : (
-            <table className="dtable">
-              <thead>
-                <tr>
-                  <th>Brand</th>
-                  <th className="num">Jobs</th>
-                  <th className="num">Est. metres used</th>
-                  <th className="num">Revenue</th>
-                  <th className="num">COGS</th>
-                  <th className="num">Gross profit</th>
-                </tr>
-              </thead>
-              <tbody>
-                {brandAnalysis.map((b) => (
-                  <tr key={b.brand}>
-                    <td>{b.brand}</td>
-                    <td className="num">{b.jobs}</td>
-                    <td className="num">{b.estimatedMetresConsumed.toFixed(1)}m</td>
-                    <td className="num">{formatCents(b.revenueCents)}</td>
-                    <td className="num">{formatCents(b.cogsCents)}</td>
-                    <td className="num">{formatCentsSigned(b.grossProfitCents)}</td>
+            <div style={{ overflowX: "auto" }}>
+              <table className="dtable">
+                <thead>
+                  <tr>
+                    <th>Brand</th>
+                    <th className="num">Jobs</th>
+                    <th className="num">Est. metres used</th>
+                    <th className="num">Revenue</th>
+                    <th className="num">COGS</th>
+                    <th className="num">Gross profit</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {brandAnalysis.map((b) => (
+                    <tr key={b.brand}>
+                      <td>{b.brand}</td>
+                      <td className="num">{b.jobs}</td>
+                      <td className="num">{b.estimatedMetresConsumed.toFixed(1)}m</td>
+                      <td className="num">{formatCents(b.revenueCents)}</td>
+                      <td className="num">{formatCents(b.cogsCents)}</td>
+                      <td className="num">{formatCentsSigned(b.grossProfitCents)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </Card>
       ) : null}
@@ -271,24 +273,26 @@ export function StringingReportsView({
             {racketBrands.length === 0 ? (
               <div className="row-s">No jobs in this period.</div>
             ) : (
-              <table className="dtable">
-                <thead>
-                  <tr>
-                    <th>Brand</th>
-                    <th className="num">Jobs</th>
-                    <th className="num">Rackets</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {racketBrands.map((r) => (
-                    <tr key={r.brand}>
-                      <td>{r.brand}</td>
-                      <td className="num">{r.jobs}</td>
-                      <td className="num">{r.rackets}</td>
+              <div style={{ overflowX: "auto" }}>
+                <table className="dtable">
+                  <thead>
+                    <tr>
+                      <th>Brand</th>
+                      <th className="num">Jobs</th>
+                      <th className="num">Rackets</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {racketBrands.map((r) => (
+                      <tr key={r.brand}>
+                        <td>{r.brand}</td>
+                        <td className="num">{r.jobs}</td>
+                        <td className="num">{r.rackets}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </Card>
           <Card padding="18px">
@@ -298,26 +302,28 @@ export function StringingReportsView({
             {racketSeries.length === 0 ? (
               <div className="row-s">No data.</div>
             ) : (
-              <table className="dtable">
-                <thead>
-                  <tr>
-                    <th>Brand</th>
-                    <th>Series</th>
-                    <th className="num">Jobs</th>
-                    <th className="num">Rackets</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {racketSeries.map((r) => (
-                    <tr key={`${r.brand}-${r.series}`}>
-                      <td>{r.brand}</td>
-                      <td>{r.series}</td>
-                      <td className="num">{r.jobs}</td>
-                      <td className="num">{r.rackets}</td>
+              <div style={{ overflowX: "auto" }}>
+                <table className="dtable">
+                  <thead>
+                    <tr>
+                      <th>Brand</th>
+                      <th>Series</th>
+                      <th className="num">Jobs</th>
+                      <th className="num">Rackets</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {racketSeries.map((r) => (
+                      <tr key={`${r.brand}-${r.series}`}>
+                        <td>{r.brand}</td>
+                        <td>{r.series}</td>
+                        <td className="num">{r.jobs}</td>
+                        <td className="num">{r.rackets}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </Card>
           <Card padding="18px">
@@ -327,26 +333,28 @@ export function StringingReportsView({
             {racketModels.length === 0 ? (
               <div className="row-s">No jobs in this period.</div>
             ) : (
-              <table className="dtable">
-                <thead>
-                  <tr>
-                    <th>Model</th>
-                    <th className="num">Jobs</th>
-                    <th className="num">Rackets</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {racketModels.map((r) => (
-                    <tr key={`${r.brand}-${r.series}-${r.model}-${r.generationYear}-${r.generationName}`}>
-                      <td>
-                        {r.brand} {r.series} {r.model} {r.generationYear ?? ""} {r.generationName ?? ""}
-                      </td>
-                      <td className="num">{r.jobs}</td>
-                      <td className="num">{r.rackets}</td>
+              <div style={{ overflowX: "auto" }}>
+                <table className="dtable">
+                  <thead>
+                    <tr>
+                      <th>Model</th>
+                      <th className="num">Jobs</th>
+                      <th className="num">Rackets</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {racketModels.map((r) => (
+                      <tr key={`${r.brand}-${r.series}-${r.model}-${r.generationYear}-${r.generationName}`}>
+                        <td>
+                          {r.brand} {r.series} {r.model} {r.generationYear ?? ""} {r.generationName ?? ""}
+                        </td>
+                        <td className="num">{r.jobs}</td>
+                        <td className="num">{r.rackets}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </Card>
         </div>

@@ -240,28 +240,30 @@ export function FinancialsView({
           {expenseBreakdown.byCategory.length === 0 ? (
             <div className="row-s">No operating expenses in this period.</div>
           ) : (
-            <table className="dtable">
-              <thead>
-                <tr>
-                  <th>Category</th>
-                  <th className="num">Amount</th>
-                  <th className="num">% of total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {expenseBreakdown.byCategory.map((c) => (
-                  <tr key={c.categoryId}>
-                    <td>
-                      <Link href={`/expenses?categoryId=${c.categoryId}&${drillQuery}`} style={{ color: "var(--court-600)" }}>
-                        {c.categoryName}
-                      </Link>
-                    </td>
-                    <td className="num">{formatCents(c.amountCents)}</td>
-                    <td className="num">{c.percentOfTotal.toFixed(1)}%</td>
+            <div style={{ overflowX: "auto" }}>
+              <table className="dtable">
+                <thead>
+                  <tr>
+                    <th>Category</th>
+                    <th className="num">Amount</th>
+                    <th className="num">% of total</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {expenseBreakdown.byCategory.map((c) => (
+                    <tr key={c.categoryId}>
+                      <td>
+                        <Link href={`/expenses?categoryId=${c.categoryId}&${drillQuery}`} style={{ color: "var(--court-600)" }}>
+                          {c.categoryName}
+                        </Link>
+                      </td>
+                      <td className="num">{formatCents(c.amountCents)}</td>
+                      <td className="num">{c.percentOfTotal.toFixed(1)}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </Card>
       </div>

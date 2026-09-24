@@ -151,30 +151,32 @@ export function ProductReportsView({
           {categoryAnalysis.length === 0 ? (
             <div className="row-s">No product sales in this period.</div>
           ) : (
-            <table className="dtable">
-              <thead>
-                <tr>
-                  <th>Category</th>
-                  <th className="num">Units sold</th>
-                  <th className="num">Revenue</th>
-                  <th className="num">COGS</th>
-                  <th className="num">Gross profit</th>
-                  <th className="num">Margin</th>
-                </tr>
-              </thead>
-              <tbody>
-                {categoryAnalysis.map((c) => (
-                  <tr key={c.categoryId}>
-                    <td>{c.categoryName}</td>
-                    <td className="num">{c.unitsSold}</td>
-                    <td className="num">{formatCents(c.revenueCents)}</td>
-                    <td className="num">{formatCents(c.cogsCents)}</td>
-                    <td className="num">{formatCentsSigned(c.grossProfitCents)}</td>
-                    <td className="num">{c.grossMarginPct === null ? "—" : `${c.grossMarginPct.toFixed(1)}%`}</td>
+            <div style={{ overflowX: "auto" }}>
+              <table className="dtable">
+                <thead>
+                  <tr>
+                    <th>Category</th>
+                    <th className="num">Units sold</th>
+                    <th className="num">Revenue</th>
+                    <th className="num">COGS</th>
+                    <th className="num">Gross profit</th>
+                    <th className="num">Margin</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {categoryAnalysis.map((c) => (
+                    <tr key={c.categoryId}>
+                      <td>{c.categoryName}</td>
+                      <td className="num">{c.unitsSold}</td>
+                      <td className="num">{formatCents(c.revenueCents)}</td>
+                      <td className="num">{formatCents(c.cogsCents)}</td>
+                      <td className="num">{formatCentsSigned(c.grossProfitCents)}</td>
+                      <td className="num">{c.grossMarginPct === null ? "—" : `${c.grossMarginPct.toFixed(1)}%`}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </Card>
       ) : null}
