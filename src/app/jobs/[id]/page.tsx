@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getJob } from "@/lib/jobs";
+import { listMachineOptions } from "@/lib/machines";
 import { racketLabel } from "@/lib/racket-label";
 import { Card } from "@/components/ds/card";
 import { Button } from "@/components/ds/button";
@@ -9,6 +10,7 @@ import { SpecList, type SpecListItem } from "@/components/ds/spec-list";
 import { formatCents, formatDate } from "@/lib/format";
 import { ChangeStatusControl } from "@/components/jobs/change-status-control";
 import { ChangePaymentStatusControl } from "@/components/jobs/change-payment-status-control";
+import { MachineSelect } from "@/components/jobs/machine-select";
 import { LinkedSalePanel } from "@/components/jobs/linked-sale-panel";
 import { CancelJobButton } from "@/components/jobs/cancel-job-button";
 import { DeleteJobButton } from "@/components/jobs/delete-job-button";
@@ -20,6 +22,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
   const { id } = await params;
   const job = await getJob(id);
   if (!job) notFound();
+  const machineOptions = await listMachineOptions(job.machineId);
 
   const main = job.strings.find((s) => s.role === "main");
   const cross = job.strings.find((s) => s.role === "cross");
@@ -134,6 +137,15 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
             {job.linkedSale ? "Sale" : "Payment status"}
           </div>
           {job.linkedSale ? <LinkedSalePanel jobId={job.id} sale={job.linkedSale} /> : <ChangePaymentStatusControl jobId={job.id} paymentStatus={job.paymentStatus} />}
+        </div>
+        <div>
+          <div className="lab" style={{ marginBottom: 6 }}>
+            Machine used
+          </div>
+          {/* Keyed on machineId for the same reason as ChangeStatusControl
+              above — remounts with the fresh value after any external
+              refresh instead of only tracking clicks made here. */}
+          <MachineSelect key={job.machineId ?? "none"} jobId={job.id} machineId={job.machineId} options={machineOptions} />
         </div>
       </div>
 

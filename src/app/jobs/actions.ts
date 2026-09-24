@@ -9,6 +9,7 @@ import {
   deleteJob,
   getJobSetupForRepeat,
   getPreviousJobForRacket,
+  setJobMachine,
   updateJob,
   type JobInput,
   type JobPaymentStatus,
@@ -229,6 +230,13 @@ export async function changePaymentStatusAction(jobId: string, paymentStatus: Jo
     revalidatePath(`/customers/${job.customerId}`);
     revalidatePath(`/customers/${job.customerId}/rackets/${job.customerRacketId}`);
   }
+}
+
+export async function setJobMachineAction(jobId: string, machineId: string | null) {
+  await setJobMachine(jobId, machineId);
+  revalidatePath("/jobs");
+  revalidatePath(`/jobs/${jobId}`);
+  revalidatePath("/machines");
 }
 
 export interface DeleteJobResult {

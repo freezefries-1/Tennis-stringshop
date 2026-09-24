@@ -311,6 +311,21 @@ export const preStretchTypeEnum = pgEnum("pre_stretch_type", ["none", "manual", 
 // truth from Phase 6 on; this stays live only for jobs with no linked Sale.
 export const jobPaymentStatusEnum = pgEnum("job_payment_status", ["unpaid", "partially_paid", "paid"]);
 
+// A physical stringing machine — lets jobs be attributed to which machine
+// actually strung them (useful once there's more than one, or the current
+// one gets replaced) and drives a simple usage-based "needs cleaning"
+// reminder (jobs strung since lastCleanedAt, not elapsed time — string
+// tension load, not the calendar, is what actually dirties a machine).
+export const stringingMachines = pgTable("stringing_machines", {
+  id: id(),
+  name: text("name").notNull(),
+  cleanIntervalJobs: integer("clean_interval_jobs").notNull().default(50),
+  lastCleanedAt: timestamp("last_cleaned_at", { withTimezone: true }),
+  notes: text("notes"),
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
+  ...timestamps,
+});
+
 // A physical racket's stringing record. Phase 4.
 //
 // Money/knots/pre-stretch/notes live here, not on customer_rackets or
@@ -371,6 +386,10 @@ export const stringJobs = pgTable("string_jobs", {
   // pointer to it, kept in sync in the same transaction that sets the
   // other side. See createJobSale in src/lib/sales.ts.
   saleId: uuid("sale_id"),
+  // Nullable — recorded any time (doesn't have to be known up front), and a
+  // job strung before machines were tracked, or on a machine since retired,
+  // just stays unset rather than pointing at a placeholder.
+  machineId: uuid("machine_id").references(() => stringingMachines.id),
   ...timestamps,
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });

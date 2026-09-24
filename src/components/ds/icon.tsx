@@ -33,6 +33,7 @@ import {
   ChevronLeft,
   Wallet,
   TrendingUp,
+  Cog,
   type LucideIcon,
 } from "lucide-react";
 
@@ -71,6 +72,7 @@ const ICONS: Record<string, LucideIcon> = {
   "chevron-left": ChevronLeft,
   wallet: Wallet,
   "trending-up": TrendingUp,
+  cog: Cog,
 };
 
 export interface IconProps {

@@ -394,6 +394,14 @@ export async function changePaymentStatus(id: string, paymentStatus: JobPaymentS
   return row ?? null;
 }
 
+/** Which machine strung this job — settable any time, independent of
+ * status (the stringer may only know this once work actually starts, or
+ * may want to correct it later). null clears it back to "not recorded". */
+export async function setJobMachine(id: string, machineId: string | null): Promise<StringJob | null> {
+  const [row] = await db.update(stringJobs).set({ machineId, updatedAt: new Date() }).where(eq(stringJobs.id, id)).returning();
+  return row ?? null;
+}
+
 /** True, permanent deletion (mistaken entries only — prefer changeJobStatus
  * to "cancelled" for a real job that didn't go ahead, per the brief). Its
  * own strings/services rows cascade automatically; a future Sale line

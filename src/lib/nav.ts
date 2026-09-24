@@ -25,6 +25,7 @@ export const NAV: NavItem[] = [
   { value: "inventory", label: "Inventory", icon: "layers", count: 4 },
   { value: "products", label: "Products", icon: "package" },
   { value: "catalogue", label: "Racket database", icon: "library" },
+  { value: "machines", label: "Machines", icon: "cog" },
   { section: "Money" },
   { value: "expenses", label: "Expenses", icon: "receipt" },
   { value: "other-income", label: "Other income", icon: "wallet" },
@@ -103,6 +104,14 @@ export const PAGES: Record<string, PageMeta> = {
     label: "Stock",
     action: "Add model",
     actionHref: "/catalogue/models/new",
+  },
+  machines: {
+    title: "Machines",
+    label: "Stock",
+    // "Add machine" is inline in the page itself (MachinesView), same
+    // reasoning as Reports' export buttons — no separate route to link the
+    // top bar's action button to.
+    action: null,
   },
   expenses: {
     title: "Expenses",
