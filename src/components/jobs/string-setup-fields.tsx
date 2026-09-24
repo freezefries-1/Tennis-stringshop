@@ -116,6 +116,7 @@ function StringLineFields({
           <StringProductPicker
             selectedId={value.stringProductId}
             selectedLabel={stringProductLabel(value)}
+            selectedUnit={value.usageUnit}
             onSelect={(p: PickedStringProduct | null) =>
               onChange(
                 p

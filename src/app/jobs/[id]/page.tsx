@@ -59,20 +59,33 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
     return `${s.quantityUsed}${s.usageUnit === "set" ? " sets" : "m"} used${s.stockOverride ? " (stock override)" : ""}`;
   }
 
+  // Distinguishes which inventory item a line actually drew from when two
+  // products share a name (e.g. "Babolat RPM Blast" tracked once by the
+  // reel/metre and again by the set) — customer-supplied lines have no
+  // linked product, so no tag applies to them.
+  function trackingBadge(s: typeof main) {
+    if (!s || s.customerSupplied || !s.stringProductId) return null;
+    return (
+      <Badge tone="neutral" style={{ marginLeft: 8 }}>
+        {s.usageUnit === "set" ? "Set" : "Reel"}
+      </Badge>
+    );
+  }
+
   const stringItems: SpecListItem[] = sameString
     ? [
-        { label: "String", value: `${main.brandSnapshot} ${main.stringNameSnapshot}${main.customerSupplied ? " (customer supplied)" : ""}` },
+        { label: "String", value: <span>{main.brandSnapshot} {main.stringNameSnapshot}{main.customerSupplied ? " (customer supplied)" : ""}{trackingBadge(main)}</span> },
         { label: "Gauge", value: main.gaugeSnapshot ? `${main.gaugeSnapshot} mm` : "—" },
         { label: "Colour", value: main.colourSnapshot ?? "—" },
         { label: "Tension", value: sameTension ? `${main.tension} ${main.tensionUnit}` : `${main.tension} / ${cross?.tension} ${main.tensionUnit}` },
         ...(usageLabel(main) ? [{ label: "Usage", value: usageLabel(main) as string }] : []),
       ]
     : [
-        { label: "Main string", value: main ? `${main.brandSnapshot} ${main.stringNameSnapshot}${main.customerSupplied ? " (customer supplied)" : ""}` : "—" },
+        { label: "Main string", value: main ? <span>{main.brandSnapshot} {main.stringNameSnapshot}{main.customerSupplied ? " (customer supplied)" : ""}{trackingBadge(main)}</span> : "—" },
         { label: "Main gauge / colour", value: main ? [main.gaugeSnapshot ? `${main.gaugeSnapshot} mm` : null, main.colourSnapshot].filter(Boolean).join(" · ") || "—" : "—" },
         { label: "Main tension", value: main ? `${main.tension} ${main.tensionUnit}` : "—" },
         ...(usageLabel(main) ? [{ label: "Main usage", value: usageLabel(main) as string }] : []),
-        { label: "Cross string", value: cross ? `${cross.brandSnapshot} ${cross.stringNameSnapshot}${cross.customerSupplied ? " (customer supplied)" : ""}` : "—" },
+        { label: "Cross string", value: cross ? <span>{cross.brandSnapshot} {cross.stringNameSnapshot}{cross.customerSupplied ? " (customer supplied)" : ""}{trackingBadge(cross)}</span> : "—" },
         { label: "Cross gauge / colour", value: cross ? [cross.gaugeSnapshot ? `${cross.gaugeSnapshot} mm` : null, cross.colourSnapshot].filter(Boolean).join(" · ") || "—" : "—" },
         { label: "Cross tension", value: cross ? `${cross.tension} ${cross.tensionUnit}` : "—" },
         ...(usageLabel(cross) ? [{ label: "Cross usage", value: usageLabel(cross) as string }] : []),

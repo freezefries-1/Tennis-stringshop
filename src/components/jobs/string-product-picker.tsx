@@ -5,6 +5,7 @@ import { Field } from "@/components/ds/field";
 import { Input } from "@/components/ds/input";
 import { Card } from "@/components/ds/card";
 import { Button } from "@/components/ds/button";
+import { Badge } from "@/components/ds/badge";
 import { fetchStringProductsForPicker, quickCreateStringProductForJob } from "@/app/jobs/actions";
 
 export interface PickedStringProduct {
@@ -88,10 +89,16 @@ function QuickAddStringProduct({ initialQuery, onCancel, onCreated }: { initialQ
 export function StringProductPicker({
   selectedId,
   selectedLabel,
+  selectedUnit,
   onSelect,
 }: {
   selectedId: string;
   selectedLabel: string;
+  /** Reel (metres) vs set — shown as a tag next to the selection so two
+   * products with the same name (e.g. the same string tracked once by the
+   * reel and again by the set) stay visually distinguishable after picking
+   * one, not just while searching. */
+  selectedUnit?: "m" | "set";
   onSelect: (product: PickedStringProduct | null) => void;
 }) {
   const [q, setQ] = useState("");
@@ -127,6 +134,7 @@ export function StringProductPicker({
       <Field label="String">
         <div style={{ display: "flex", alignItems: "center", gap: 8, height: 38, padding: "0 12px", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", background: "var(--paper-100)" }}>
           <span style={{ flex: 1, fontSize: 15 }}>{selectedLabel || "Selected string"}</span>
+          {selectedUnit ? <Badge tone="neutral">{selectedUnit === "set" ? "Set" : "Reel"}</Badge> : null}
           <button type="button" onClick={() => onSelect(null)} style={{ border: "none", background: "none", color: "var(--ink-400)", cursor: "pointer", fontSize: 13 }}>
             Change
           </button>
