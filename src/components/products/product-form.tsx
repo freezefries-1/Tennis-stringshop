@@ -34,6 +34,7 @@ export function ProductForm({ mode, product, categories, suppliers: initialSuppl
   const [trackInventory, setTrackInventory] = useState(product?.trackInventory ?? true);
   const [notes, setNotes] = useState(product?.notes ?? "");
   const [openingStockQty, setOpeningStockQty] = useState("");
+  const [openingStockDate, setOpeningStockDate] = useState(TODAY);
 
   const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -65,7 +66,7 @@ export function ProductForm({ mode, product, categories, suppliers: initialSuppl
       await receiveProductStockAction({
         productId: result.productId!,
         supplierId: supplier?.id ?? null,
-        purchaseDate: TODAY,
+        purchaseDate: openingStockDate,
         purchaseCostCents: (input.costPriceCents ?? 0) * openingQty,
         quantity: openingQty,
         isOpeningStock: true,
@@ -167,9 +168,14 @@ export function ProductForm({ mode, product, categories, suppliers: initialSuppl
         </div>
       ) : null}
       {trackInventory && mode === "create" ? (
-        <Field label="Opening stock" hint="Optional — how many you already have on hand. Leave blank to receive stock as a separate step later." htmlFor="openingStock">
-          <Input id="openingStock" type="number" inputMode="numeric" min="0" step="1" value={openingStockQty} onChange={(e) => setOpeningStockQty(e.target.value)} suffix="units" style={{ width: "100%" }} />
-        </Field>
+        <div className="form-grid">
+          <Field label="Opening stock" hint="Optional — how many you already have on hand. Leave blank to receive stock as a separate step later." htmlFor="openingStock">
+            <Input id="openingStock" type="number" inputMode="numeric" min="0" step="1" value={openingStockQty} onChange={(e) => setOpeningStockQty(e.target.value)} suffix="units" style={{ width: "100%" }} />
+          </Field>
+          <Field label="Purchase date" hint="When this opening stock was bought" htmlFor="openingStockDate">
+            <Input id="openingStockDate" type="date" value={openingStockDate} onChange={(e) => setOpeningStockDate(e.target.value)} style={{ width: "100%" }} />
+          </Field>
+        </div>
       ) : null}
       <Field label="Notes" htmlFor="notes">
         <textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
