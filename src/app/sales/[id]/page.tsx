@@ -8,6 +8,7 @@ import { SpecList, type SpecListItem } from "@/components/ds/spec-list";
 import { formatCents, formatDate } from "@/lib/format";
 import { RecordPaymentPanel } from "@/components/sales/record-payment-panel";
 import { CancelSaleButton } from "@/components/sales/cancel-sale-button";
+import { EditSaleDateButton } from "@/components/sales/edit-sale-date-button";
 import { ReturnItemPanel } from "@/components/sales/return-item-panel";
 import { SALE_PAYMENT_STATUS_LABEL, SALE_PAYMENT_STATUS_TONE, SALE_STATUS_LABEL, SALE_STATUS_TONE, PAYMENT_METHOD_LABEL } from "@/components/sales/sale-status";
 
@@ -74,6 +75,7 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
               View receipt
             </Button>
           </Link>
+          <EditSaleDateButton saleId={sale.id} occurredAt={sale.occurredAt} />
           {!isReversal ? <RecordPaymentPanel saleId={sale.id} balanceDueCents={sale.balanceDueCents} /> : null}
           {!isReversal && sale.status === "completed" ? <CancelSaleButton saleId={sale.id} /> : null}
         </div>

@@ -315,6 +315,23 @@ export async function listPaymentsForSale(saleId: string): Promise<SalePayment[]
   return db.select().from(salePayments).where(eq(salePayments.saleId, saleId)).orderBy(desc(salePayments.paymentDate));
 }
 
+/** Corrects occurredAt's calendar day only — the time-of-day already on the
+ * row (set at checkout, or copied from the job's completedAt for a
+ * job-linked sale) is kept as-is, so this can't reorder same-day sales
+ * relative to each other just from a date fix. occurredAt is the sole
+ * revenue date reports read (see the header comment above) and is
+ * deliberately independent of a linked job's own dates, so correcting it
+ * here needs no follow-on sync anywhere. */
+export async function updateSaleDate(saleId: string, newDate: string): Promise<Sale> {
+  const [sale] = await db.select().from(sales).where(eq(sales.id, saleId)).limit(1);
+  if (!sale) throw new Error("Sale not found");
+  const [year, month, day] = newDate.split("-").map(Number);
+  const occurredAt = new Date(sale.occurredAt);
+  occurredAt.setFullYear(year, month - 1, day);
+  const [updated] = await db.update(sales).set({ occurredAt, updatedAt: new Date() }).where(eq(sales.id, saleId)).returning();
+  return updated;
+}
+
 // -- cancel --------------------------------------------------------------
 
 export type CancelSaleResult = { ok: true; sale: Sale } | { ok: false; reason: "not_found" } | { ok: false; reason: "already_paid" } | { ok: false; reason: "not_completed" };
