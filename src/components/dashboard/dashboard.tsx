@@ -17,6 +17,8 @@ import type { RecentMovementRow } from "@/lib/string-inventory";
 import type { DashboardSalesStats, RecentSaleRow } from "@/lib/sales";
 import type { FinancialSummary, SalesSplit, PeriodComparison } from "@/lib/financials";
 import type { ExpenseListRow } from "@/lib/expenses";
+import type { ReadyForCollectionRow, RecentJobRow } from "@/lib/jobs";
+import { JOB_STATUS_LABEL, JOB_STATUS_TONE } from "@/components/jobs/job-status";
 
 function PanelHead({ label, title, action }: { label: string; title?: string; action?: ReactNode }) {
   return (
@@ -74,13 +76,19 @@ function PL({ d, label, comparison }: { d: FinancialSummary; label: string; comp
   );
 }
 
-function ReadyList() {
+function daysSince(d: Date): string {
+  const days = Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
+  if (days <= 0) return "today";
+  return `${days} day${days === 1 ? "" : "s"}`;
+}
+
+function ReadyList({ items }: { items: ReadyForCollectionRow[] }) {
   const router = useRouter();
   return (
     <Card padding="20px 0 8px">
       <div style={{ padding: "0 24px" }}>
         <PanelHead
-          label={`Waiting for collection · ${DATA.ready.length}`}
+          label={`Waiting for collection · ${items.length}`}
           action={
             <Button size="sm" variant="ghost" iconRight="arrow-right" onClick={() => router.push("/jobs")}>
               All jobs
@@ -88,30 +96,36 @@ function ReadyList() {
           }
         />
       </div>
-      <div className="rows">
-        {DATA.ready.map((j) => (
-          <div className="row" key={j.id}>
-            <div className="row-main">
-              <div className="row-t">{j.customer}</div>
-              <div className="row-s num">
-                {j.id} · {j.racket}
+      {items.length === 0 ? (
+        <div style={{ padding: "0 24px 16px" }} className="row-s">
+          Nothing waiting for collection right now.
+        </div>
+      ) : (
+        <div className="rows">
+          {items.map((j) => (
+            <div className="row" key={j.id} onClick={() => router.push(`/jobs/${j.id}`)} style={{ cursor: "pointer" }}>
+              <div className="row-main">
+                <div className="row-t">{j.customerName}</div>
+                <div className="row-s num">
+                  {j.code} · {j.racketLabel}
+                </div>
+              </div>
+              <div className="row-end">
+                <span className="row-s num">Ready {daysSince(j.completedAt)}</span>
+                {j.paid ? (
+                  <Badge tone="success" dot>
+                    Paid
+                  </Badge>
+                ) : (
+                  <Badge tone="warning" dot>
+                    Unpaid
+                  </Badge>
+                )}
               </div>
             </div>
-            <div className="row-end">
-              <span className="row-s num">Ready {j.since}</span>
-              {j.paid ? (
-                <Badge tone="success" dot>
-                  Paid
-                </Badge>
-              ) : (
-                <Badge tone="warning" dot>
-                  Unpaid
-                </Badge>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </Card>
   );
 }
@@ -233,7 +247,7 @@ function RecentInventoryMovements({ movements }: { movements: RecentMovementRow[
   );
 }
 
-function RecentJobs() {
+function RecentJobs({ jobs }: { jobs: RecentJobRow[] }) {
   const router = useRouter();
   return (
     <Card padding="20px 0 8px">
@@ -247,25 +261,31 @@ function RecentJobs() {
           }
         />
       </div>
-      <div className="rows">
-        {DATA.jobs.map((j) => (
-          <div className="row" key={j.id}>
-            <div className="row-main">
-              <div className="row-t">{j.racket}</div>
-              <div className="row-s num">
-                <i className="dot" style={{ background: j.family }} />
-                {j.id} · {j.customer} · {j.string} · {j.tension}
+      {jobs.length === 0 ? (
+        <div style={{ padding: "0 24px 16px" }} className="row-s">
+          No string jobs yet.
+        </div>
+      ) : (
+        <div className="rows">
+          {jobs.map((j) => (
+            <div className="row" key={j.id} onClick={() => router.push(`/jobs/${j.id}`)} style={{ cursor: "pointer" }}>
+              <div className="row-main">
+                <div className="row-t">{j.racketLabel}</div>
+                <div className="row-s num">
+                  {j.code} · {j.customerName} · {j.mainString}
+                  {j.crossString !== "—" && j.crossString !== j.mainString ? ` / ${j.crossString}` : ""}
+                </div>
+              </div>
+              <div className="row-end">
+                <span className="row-s num">{j.dueOn ? formatDate(j.dueOn) : "No due date"}</span>
+                <Badge tone={JOB_STATUS_TONE[j.status]} dot>
+                  {JOB_STATUS_LABEL[j.status]}
+                </Badge>
               </div>
             </div>
-            <div className="row-end">
-              <span className="row-s num">{j.due}</span>
-              <Badge tone={j.tone} dot>
-                {j.status}
-              </Badge>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </Card>
   );
 }
@@ -364,6 +384,8 @@ export function Dashboard({
   salesSplit,
   stringJobCount,
   comparison,
+  readyForCollection,
+  recentJobs,
   initialFrom,
   initialTo,
 }: {
@@ -376,6 +398,8 @@ export function Dashboard({
   salesSplit: SalesSplit;
   stringJobCount: number;
   comparison: PeriodComparison;
+  readyForCollection: ReadyForCollectionRow[];
+  recentJobs: RecentJobRow[];
   initialFrom: string;
   initialTo: string;
 }) {
@@ -504,7 +528,7 @@ export function Dashboard({
         <div className="hair" />
       </div>
       <div className="g2">
-        <ReadyList />
+        <ReadyList items={readyForCollection} />
         <LowStock items={lowStock} />
       </div>
 
@@ -513,7 +537,7 @@ export function Dashboard({
         <div className="hair" />
       </div>
       <div className="g2">
-        <RecentJobs />
+        <RecentJobs jobs={recentJobs} />
         <RecentSales sales={recentSales} />
       </div>
       <div className="g2">

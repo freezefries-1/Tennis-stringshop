@@ -1,8 +1,8 @@
 "use server";
 
-import { and, desc, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db/client";
-import { customerRackets, customers, racketBrands, racketModels, racketSeries, stringJobs } from "@/db/schema";
+import { customerRackets, customers, products, racketBrands, racketModels, racketSeries, sales, stringJobs } from "@/db/schema";
 import { racketLabel } from "@/lib/racket-label";
 
 export interface CustomerSearchHit {
@@ -12,9 +12,8 @@ export interface CustomerSearchHit {
   phone: string;
 }
 
-/** Backs the site-wide ⌘K search's "Customers" group — real rows, unlike
- * the Products/Sales groups, which are still Phase 1 seed data until their
- * own phases (5/6) land. */
+/** Backs the site-wide ⌘K search's "Customers" group — real rows, same as
+ * every other group in this file. */
 export async function searchCustomers(query: string): Promise<CustomerSearchHit[]> {
   const q = query.trim();
   if (!q) return [];
@@ -139,6 +138,79 @@ export async function searchJobs(query: string): Promise<JobSearchHit[]> {
     )
     .orderBy(desc(stringJobs.receivedOn))
     .limit(5);
+
+  return rows;
+}
+
+export interface ProductSearchHit {
+  id: string;
+  code: string;
+  label: string;
+}
+
+/** "Products" group — real retail catalogue (Phase 6), searched by code,
+ * name, brand, variant, SKU or barcode. Deliberately a lean standalone
+ * query rather than reusing listProducts()/searchProductsForPicker() — the
+ * search palette only needs id/code/label, not the stock-summary join those
+ * helpers also compute. */
+export async function searchProducts(query: string): Promise<ProductSearchHit[]> {
+  const q = query.trim();
+  if (!q) return [];
+  const like = `%${q}%`;
+
+  const rows = await db
+    .select({ id: products.id, code: products.code, name: products.name, brand: products.brand, variant: products.variant })
+    .from(products)
+    .where(
+      and(
+        isNull(products.archivedAt),
+        sql`(
+          ${products.code} ilike ${like}
+          or ${products.name} ilike ${like}
+          or ${products.brand} ilike ${like}
+          or ${products.variant} ilike ${like}
+          or ${products.sku} ilike ${like}
+          or ${products.barcode} ilike ${like}
+        )`,
+      ),
+    )
+    .orderBy(products.name)
+    .limit(4);
+
+  return rows.map((r) => ({ id: r.id, code: r.code, label: [r.brand, r.name, r.variant].filter(Boolean).join(" ") }));
+}
+
+export interface SaleSearchHit {
+  id: string;
+  code: string;
+  customerName: string | null;
+}
+
+/** "Sales" group — real POS sales (Phase 6), searched by sale code, customer
+ * name, or any line item's description/SKU snapshot on that sale. Walk-in
+ * sales (nullable customerId) match on code/item text only. */
+export async function searchSales(query: string): Promise<SaleSearchHit[]> {
+  const q = query.trim();
+  if (!q) return [];
+  const like = `%${q}%`;
+
+  const rows = await db
+    .select({ id: sales.id, code: sales.code, customerName: customers.name })
+    .from(sales)
+    .leftJoin(customers, eq(customers.id, sales.customerId))
+    .where(
+      sql`(
+        ${sales.code} ilike ${like}
+        or ${customers.name} ilike ${like}
+        or exists (
+          select 1 from sale_items si
+          where si.sale_id = ${sales.id}
+          and (si.description_snapshot ilike ${like} or si.sku_snapshot ilike ${like})
+        )
+      )`,
+    )
+    .orderBy(desc(sales.occurredAt))
+    .limit(4);
 
   return rows;
 }

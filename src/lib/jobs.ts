@@ -1,6 +1,6 @@
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db/client";
-import { customerRackets, customers, stringJobInventoryAllocations, stringJobs, stringJobServices, stringJobStrings } from "@/db/schema";
+import { customerRackets, customers, sales, stringJobInventoryAllocations, stringJobs, stringJobServices, stringJobStrings } from "@/db/schema";
 import { getRacket, type RacketWithSpecs } from "./rackets";
 import { racketLabel } from "./racket-label";
 import { allocateForRole, InsufficientStockError, previewStock, reverseAllocationsForRole, type StockUnit } from "./string-inventory";
@@ -689,4 +689,87 @@ export async function getJobSetupForRepeat(jobId: string): Promise<PreviousJobSe
   const [row] = await db.select().from(stringJobs).where(eq(stringJobs.id, jobId)).limit(1);
   if (!row) return null;
   return toPreviousJobSetup(row);
+}
+
+// -- dashboard --------------------------------------------------------------
+
+export interface ReadyForCollectionRow {
+  id: string;
+  code: string;
+  customerName: string;
+  racketLabel: string;
+  completedAt: Date;
+  /** Once a job has a linked Sale, that Sale is the financial source of
+   * truth for payment status (brief §56) — the job's own paymentStatus
+   * column is frozen from that point. Resolved here so the caller never
+   * has to know which of the two columns is authoritative for a given
+   * row. */
+  paid: boolean;
+}
+
+/** Completed but not yet collected — oldest first, so the longest-waiting
+ * pickup surfaces first. LIMIT-bound, not the full jobs table. */
+export async function listReadyForCollection(limit = 5): Promise<ReadyForCollectionRow[]> {
+  const rows = await db
+    .select({
+      id: stringJobs.id,
+      code: stringJobs.code,
+      customerName: stringJobs.customerName,
+      racketLabel: stringJobs.racketLabel,
+      completedAt: stringJobs.completedAt,
+      saleId: stringJobs.saleId,
+      jobPaymentStatus: stringJobs.paymentStatus,
+      salePaymentStatus: sales.paymentStatus,
+    })
+    .from(stringJobs)
+    .leftJoin(sales, eq(sales.id, stringJobs.saleId))
+    .where(eq(stringJobs.status, "completed"))
+    .orderBy(stringJobs.completedAt)
+    .limit(limit);
+
+  return rows.map((r) => ({
+    id: r.id,
+    code: r.code,
+    customerName: r.customerName,
+    racketLabel: r.racketLabel,
+    completedAt: r.completedAt as Date,
+    paid: r.saleId ? r.salePaymentStatus === "paid" : r.jobPaymentStatus === "paid",
+  }));
+}
+
+export interface RecentJobRow {
+  id: string;
+  code: string;
+  customerName: string;
+  racketLabel: string;
+  mainString: string;
+  crossString: string;
+  status: JobStatus;
+  dueOn: string | null;
+  receivedOn: string;
+}
+
+/** Most recently created jobs, any status — the Dashboard's "Recent string
+ * jobs" activity feed. LIMIT-bound; reuses stringsByJobId's existing
+ * batched (not per-row) lookup. */
+export async function listRecentJobsForDashboard(limit = 5): Promise<RecentJobRow[]> {
+  const jobs = await db.select().from(stringJobs).orderBy(desc(stringJobs.createdAt)).limit(limit);
+  if (jobs.length === 0) return [];
+  const stringsMap = await stringsByJobId(jobs.map((j) => j.id));
+  return jobs.map((job) => {
+    const strings = stringsMap.get(job.id) ?? [];
+    const main = strings.find((s) => s.role === "main");
+    const cross = strings.find((s) => s.role === "cross");
+    return {
+      id: job.id,
+      code: job.code,
+      customerName: job.customerName,
+      racketLabel: job.racketLabel,
+      mainString: stringDisplay(main),
+      crossString: stringDisplay(cross),
+      status: job.status,
+      dueOn: job.dueOn,
+      receivedOn: job.receivedOn,
+    };
+  });
 }

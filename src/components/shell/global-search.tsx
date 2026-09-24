@@ -3,9 +3,18 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Input } from "@/components/ds/input";
-import { DATA } from "@/lib/data";
-import { formatMoney } from "@/lib/format";
-import { searchCustomers, searchRackets, searchJobs, type CustomerSearchHit, type RacketSearchHit, type JobSearchHit } from "./search-actions";
+import {
+  searchCustomers,
+  searchRackets,
+  searchJobs,
+  searchProducts,
+  searchSales,
+  type CustomerSearchHit,
+  type RacketSearchHit,
+  type JobSearchHit,
+  type ProductSearchHit,
+  type SaleSearchHit,
+} from "./search-actions";
 
 interface ResultItem {
   t: string;
@@ -25,6 +34,8 @@ export function GlobalSearch() {
   const [customerHits, setCustomerHits] = useState<CustomerSearchHit[]>([]);
   const [racketHits, setRacketHits] = useState<RacketSearchHit[]>([]);
   const [jobHits, setJobHits] = useState<JobSearchHit[]>([]);
+  const [productHits, setProductHits] = useState<ProductSearchHit[]>([]);
+  const [saleHits, setSaleHits] = useState<SaleSearchHit[]>([]);
   const box = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -47,28 +58,35 @@ export function GlobalSearch() {
     };
   }, []);
 
-  // Real customers/rackets/jobs, debounced — the only groups backed by the
-  // live database (Products/Sales below stay seed data until Phase 5/6).
-  // Stale hits from a previous query are filtered out at render time (the
-  // `q.trim()` guard below and in `groups`), so there's nothing to clear
-  // here — this effect only ever sets state inside the timeout callback.
+  // Real customers/rackets/jobs/products/sales, debounced — every group here
+  // is backed by the live database. Stale hits from a previous query are
+  // filtered out at render time (the `q.trim()` guard below and in
+  // `groups`), so there's nothing to clear here — this effect only ever
+  // sets state inside the timeout callback.
   useEffect(() => {
     const query = q.trim();
     if (!query) return;
     let active = true;
     const t = setTimeout(async () => {
       try {
-        const [customers, rackets, jobs] = await Promise.all([searchCustomers(query), searchRackets(query), searchJobs(query)]);
+        const [customers, rackets, jobs, products, sales] = await Promise.all([
+          searchCustomers(query),
+          searchRackets(query),
+          searchJobs(query),
+          searchProducts(query),
+          searchSales(query),
+        ]);
         if (active) {
           setCustomerHits(customers);
           setRacketHits(rackets);
           setJobHits(jobs);
+          setProductHits(products);
+          setSaleHits(sales);
         }
       } catch (err) {
-        // A failed search shouldn't crash the panel — seed-data groups
-        // (Products, Sales) still render below. Logged so a real failure
-        // (vs. an empty result) is visible in the console instead of
-        // looking identical to "nothing matched".
+        // A failed search shouldn't crash the panel — logged so a real
+        // failure (vs. an empty result) is visible in the console instead
+        // of looking identical to "nothing matched".
         if (active) console.error("Search failed:", err);
       }
     }, 150);
@@ -76,21 +94,6 @@ export function GlobalSearch() {
       active = false;
       clearTimeout(t);
     };
-  }, [q]);
-
-  const seedGroups = useMemo<ResultGroup[]>(() => {
-    const s = q.trim().toLowerCase();
-    if (!s) return [];
-    const hit = (t: string) => t.toLowerCase().includes(s);
-    const g: ResultGroup[] = [];
-
-    const pr = DATA.topProducts.filter((p) => hit(p.label)).slice(0, 4);
-    if (pr.length) g.push({ k: "Products", items: pr.map((p) => ({ t: p.label, s: `${p.qty} sold`, href: "/products" })) });
-
-    const sl = DATA.sales.filter((x) => hit(x.id) || hit(x.customer)).slice(0, 3);
-    if (sl.length) g.push({ k: "Sales", items: sl.map((x) => ({ t: x.id, s: `${x.customer} · ${formatMoney(x.total)}`, href: "/pos" })) });
-
-    return g;
   }, [q]);
 
   const groups = useMemo<ResultGroup[]>(() => {
@@ -114,8 +117,20 @@ export function GlobalSearch() {
         items: jobHits.map((j) => ({ t: j.code, s: `${j.customerName} · ${j.racketLabel}`, href: `/jobs/${j.id}` })),
       });
     }
-    return [...g, ...seedGroups];
-  }, [customerHits, racketHits, jobHits, seedGroups, q]);
+    if (productHits.length) {
+      g.push({
+        k: "Products",
+        items: productHits.map((p) => ({ t: p.label, s: p.code, href: `/products/${p.id}` })),
+      });
+    }
+    if (saleHits.length) {
+      g.push({
+        k: "Sales",
+        items: saleHits.map((s) => ({ t: s.code, s: s.customerName ?? "Walk-in", href: `/sales/${s.id}` })),
+      });
+    }
+    return g;
+  }, [customerHits, racketHits, jobHits, productHits, saleHits, q]);
 
   const go = (href: string) => {
     router.push(href);

@@ -6,6 +6,7 @@ import { getFinancialSummary, getPeriodComparison, getSalesSplit, monthRange } f
 import { listRecentExpenses } from "@/lib/expenses";
 import { getInventoryDefaults } from "@/lib/settings";
 import { getStringJobCountForPeriod } from "@/lib/reports-stringing";
+import { listReadyForCollection, listRecentJobsForDashboard } from "@/lib/jobs";
 import { resolveDateParams } from "@/lib/date-filter";
 
 export const dynamic = "force-dynamic";
@@ -37,7 +38,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   // Expenses by Category — Phase 8 §7) deliberately link out to /reports
   // instead of duplicating those queries here, per §43: "the Dashboard
   // should NOT wait for every detailed analytics report to calculate."
-  const [lowStockStrings, lowStockRetail, recentMovements, salesStats, recentSales, summary, recentExpenses, salesSplit, stringJobCount] = await Promise.all([
+  const [lowStockStrings, lowStockRetail, recentMovements, salesStats, recentSales, summary, recentExpenses, salesSplit, stringJobCount, readyForCollection, recentJobs] = await Promise.all([
     (async () => listLowStockStringProducts(8, await defaultsPromise))(),
     (async () => listLowStockRetailProducts(8, await defaultsPromise))(),
     listRecentMovements(),
@@ -47,6 +48,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     listRecentExpenses(5),
     getSalesSplit(filters),
     getStringJobCountForPeriod(filters),
+    listReadyForCollection(5),
+    listRecentJobsForDashboard(5),
   ]);
 
   const comparison = await getPeriodComparison(filters, summary);
@@ -67,6 +70,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       salesSplit={salesSplit}
       stringJobCount={stringJobCount}
       comparison={comparison}
+      readyForCollection={readyForCollection}
+      recentJobs={recentJobs}
       initialFrom={dateFrom ? dateFrom.toISOString() : ""}
       initialTo={dateTo ? dateTo.toISOString() : ""}
     />
