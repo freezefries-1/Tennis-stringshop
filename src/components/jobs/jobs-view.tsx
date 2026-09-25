@@ -217,10 +217,10 @@ export function JobsView({ jobs, stats }: { jobs: JobListRow[]; stats: JobStats 
                   {filtered.map((j) => (
                     <tr key={j.id} onClick={() => goTo(j.id)} tabIndex={0} onKeyDown={(e) => e.key === "Enter" && goTo(j.id)}>
                       <td className="num">{j.code}</td>
-                      <td>{j.customerName}</td>
                       <td>
-                        {j.racketCode} · {j.racketLabel}
+                        {j.customerName} · {j.customerCode}
                       </td>
+                      <td>{j.racketLabel}</td>
                       <td>{j.setupType === "full" ? j.mainString : `${j.mainString} / ${j.crossString}`}</td>
                       <td className="num">{tensionDisplay(j)}</td>
                       <td className="num">{formatDate(j.receivedOn)}</td>
@@ -249,9 +249,8 @@ export function JobsView({ jobs, stats }: { jobs: JobListRow[]; stats: JobStats 
                   <span className="row-s num">{j.code}</span>
                 </div>
                 <div className="ccard-meta">
-                  <span className="row-s num">
-                    {j.racketCode} · {j.racketLabel}
-                  </span>
+                  <span className="row-s num">{j.customerCode}</span>
+                  <span className="row-s num">{j.racketLabel}</span>
                   <span className="row-s num">
                     {j.setupType === "full" ? j.mainString : `${j.mainString} / ${j.crossString}`} · {tensionDisplay(j)}
                   </span>
