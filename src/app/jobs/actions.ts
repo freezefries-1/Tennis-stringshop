@@ -220,6 +220,7 @@ export async function changeJobStatusAction(jobId: string, status: JobStatus, al
       revalidatePath("/sales");
       revalidatePath(`/sales/${result.job.saleId}`);
     }
+    revalidatePath("/dashboard");
   }
   return result;
 }
@@ -266,6 +267,7 @@ export async function recordJobSalePaymentAction(saleId: string, jobId: string, 
   revalidatePath("/jobs");
   revalidatePath(`/jobs/${jobId}`);
   revalidatePath(`/sales/${saleId}`);
+  revalidatePath("/dashboard");
 }
 
 /** "Add product" on a job's linked Sale (brief §29) — a small retail item
@@ -275,6 +277,9 @@ export async function addProductToJobSaleAction(saleId: string, jobId: string, p
   const result = await addProductToJobSale(saleId, productId, quantity);
   revalidatePath(`/jobs/${jobId}`);
   revalidatePath(`/sales/${saleId}`);
+  revalidatePath("/dashboard");
+  revalidatePath("/products");
+  revalidatePath("/inventory");
   return result;
 }
 

@@ -7,6 +7,7 @@ export async function recordPaymentAction(saleId: string, amountCents: number, p
   await recordSalePayment({ saleId, amountCents, paymentMethod, notes });
   revalidatePath("/sales");
   revalidatePath(`/sales/${saleId}`);
+  revalidatePath("/dashboard");
 }
 
 export async function updateSaleDateAction(saleId: string, newDate: string) {
@@ -23,6 +24,7 @@ export async function cancelSaleAction(saleId: string, reason: string) {
   revalidatePath(`/sales/${saleId}`);
   revalidatePath("/products");
   revalidatePath("/inventory");
+  revalidatePath("/dashboard");
   return result;
 }
 
@@ -31,5 +33,6 @@ export async function returnSaleItemAction(input: ReturnItemInput) {
   revalidatePath("/sales");
   revalidatePath("/products");
   revalidatePath("/inventory");
+  revalidatePath("/dashboard");
   return result;
 }

@@ -77,6 +77,7 @@ export async function createSaleAction(input: CreateSaleInput): Promise<CreateSa
     revalidatePath("/sales");
     revalidatePath("/products");
     revalidatePath("/inventory");
+    revalidatePath("/dashboard");
     if (input.customerId) revalidatePath(`/customers/${input.customerId}`);
   }
   return result;
