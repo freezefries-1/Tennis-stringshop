@@ -364,6 +364,7 @@ export async function changeJobStatus(id: string, status: JobStatus, opts?: { al
             services: services.map((s) => ({ serviceName: s.serviceName, quantity: s.quantity, unitPriceCents: s.unitPriceCents, totalCents: s.totalCents })),
             discountCents: locked.discountCents,
             stringCogsCents,
+            carryOverPaidMethod: locked.paymentStatus === "paid" ? locked.paymentMethod : undefined,
           });
           patch.saleId = sale.id;
         }

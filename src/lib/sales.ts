@@ -471,6 +471,19 @@ export interface CreateJobSaleInput {
   services: JobServiceLine[];
   discountCents: number;
   stringCogsCents: number;
+  /** The job's own paymentStatus/paymentMethod from before it had a linked
+   * Sale (Phase 4's direct fields, settable any time pre-completion — see
+   * changePaymentStatus's guard in jobs.ts). Without this, a job marked
+   * "Paid" while still in progress silently reverted to "unpaid" the
+   * moment it was completed: the freshly-created Sale below has no
+   * knowledge of that status and always started unpaid, discarding a
+   * customer's already-recorded payment. When the job was marked "paid",
+   * this records one real sale_payments row for the full total (method
+   * falls back to "other" if the job never had one set) so the new Sale
+   * reflects it immediately. "partially_paid" can't be carried over the
+   * same way — Phase 4 never stored a paid amount, only the status, so
+   * there's no real figure to record — it's left unpaid, same as before. */
+  carryOverPaidMethod?: PaymentMethod | null;
 }
 
 /** Creates the ONE linked Sale for a String Job the first time it reaches
@@ -488,6 +501,7 @@ export async function createJobSale(tx: DbOrTx, input: CreateJobSaleInput): Prom
   const subtotalCents = input.services.reduce((sum, s) => sum + s.totalCents, 0);
   const discountCents = Math.max(0, Math.min(input.discountCents, subtotalCents));
   const totalCents = subtotalCents - discountCents;
+  const carryOverPaid = input.carryOverPaidMethod !== undefined && totalCents > 0;
 
   const [sale] = await tx
     .insert(sales)
@@ -501,11 +515,19 @@ export async function createJobSale(tx: DbOrTx, input: CreateJobSaleInput): Prom
       discountValue: discountCents > 0 ? (discountCents / 100).toFixed(2) : null,
       discountCents,
       totalCents,
-      paymentStatus: "unpaid",
+      paymentStatus: carryOverPaid ? "paid" : "unpaid",
     })
     .returning();
 
   await insertJobServiceLines(tx, sale.id, input.services, input.stringCogsCents);
+  if (carryOverPaid) {
+    await tx.insert(salePayments).values({
+      saleId: sale.id,
+      amountCents: totalCents,
+      paymentMethod: input.carryOverPaidMethod || "other",
+      notes: "Carried over from this job's payment status before completion.",
+    });
+  }
   await tx.update(stringJobs).set({ saleId: sale.id }).where(eq(stringJobs.id, input.stringJobId));
   return sale;
 }
