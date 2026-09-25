@@ -5,7 +5,7 @@ import { getRacket, type RacketWithSpecs } from "./rackets";
 import { racketLabel } from "./racket-label";
 import { allocateForRole, InsufficientStockError, previewStock, reverseAllocationsForRole, type StockUnit } from "./string-inventory";
 import { isForeignKeyViolation } from "./db-errors";
-import { createJobSale, getSale, resyncJobSale, SaleLockedError, type SaleDetail } from "./sales";
+import { createJobSale, getSale, resyncJobSale, SaleLockedError, type SaleDetail, type SalePaymentStatus } from "./sales";
 import { getSalesSplit } from "./financials";
 
 export type StringJob = typeof stringJobs.$inferSelect;
@@ -435,6 +435,27 @@ async function stringsByJobId(jobIds: string[]): Promise<Map<string, StringJobSt
   return map;
 }
 
+async function salePaymentStatusByJobId(jobs: { saleId: string | null }[]): Promise<Map<string, SalePaymentStatus>> {
+  const saleIds = jobs.map((j) => j.saleId).filter((id): id is string => id != null);
+  if (saleIds.length === 0) return new Map();
+  const rows = await db.select({ id: sales.id, paymentStatus: sales.paymentStatus }).from(sales).where(inArray(sales.id, saleIds));
+  return new Map(rows.map((r) => [r.id, r.paymentStatus]));
+}
+
+/** Once a job has a linked Sale, that Sale is the financial source of
+ * truth for payment status (brief §56, same reasoning as
+ * listReadyForCollection below) — the job's own paymentStatus column is
+ * frozen from that point on (see changePaymentStatus's guard), so reading
+ * it directly here would show whatever it was BEFORE completion forever,
+ * even after a real payment is later recorded against the Sale. A Sale's
+ * "refunded" status has no equivalent job-level state, so it maps to
+ * "unpaid" — the customer doesn't have money owed to them reflected here. */
+function resolveJobPaymentStatus(jobPaymentStatus: JobPaymentStatus, saleId: string | null, salePaymentMap: Map<string, SalePaymentStatus>): JobPaymentStatus {
+  if (!saleId) return jobPaymentStatus;
+  const salePaymentStatus = salePaymentMap.get(saleId);
+  return salePaymentStatus === "paid" ? "paid" : salePaymentStatus === "partially_paid" ? "partially_paid" : "unpaid";
+}
+
 export interface JobListRow {
   id: string;
   code: string;
@@ -477,6 +498,7 @@ export async function listJobs(): Promise<JobListRow[]> {
   if (rows.length === 0) return [];
 
   const stringsMap = await stringsByJobId(rows.map((r) => r.job.id));
+  const salePaymentMap = await salePaymentStatusByJobId(rows.map((r) => r.job));
 
   return rows.map((r) => {
     const strings = stringsMap.get(r.job.id) ?? [];
@@ -501,7 +523,7 @@ export async function listJobs(): Promise<JobListRow[]> {
       status: r.job.status,
       receivedOn: r.job.receivedOn,
       dueOn: r.job.dueOn,
-      paymentStatus: r.job.paymentStatus,
+      paymentStatus: resolveJobPaymentStatus(r.job.paymentStatus, r.job.saleId, salePaymentMap),
       finalPriceCents: r.job.finalPriceCents,
       createdAt: r.job.createdAt,
     };
@@ -599,7 +621,7 @@ export interface JobHistoryRow {
   finalPriceCents: number;
 }
 
-function toHistoryRows(jobs: StringJob[], stringsMap: Map<string, StringJobString[]>): JobHistoryRow[] {
+function toHistoryRows(jobs: StringJob[], stringsMap: Map<string, StringJobString[]>, salePaymentMap: Map<string, SalePaymentStatus>): JobHistoryRow[] {
   return jobs.map((job) => {
     const strings = stringsMap.get(job.id) ?? [];
     const main = strings.find((s) => s.role === "main");
@@ -616,7 +638,7 @@ function toHistoryRows(jobs: StringJob[], stringsMap: Map<string, StringJobStrin
       tensionUnit: main?.tensionUnit ?? cross?.tensionUnit ?? "lb",
       numberOfKnots: job.numberOfKnots,
       status: job.status,
-      paymentStatus: job.paymentStatus,
+      paymentStatus: resolveJobPaymentStatus(job.paymentStatus, job.saleId, salePaymentMap),
       finalPriceCents: job.finalPriceCents,
     };
   });
@@ -625,15 +647,15 @@ function toHistoryRows(jobs: StringJob[], stringsMap: Map<string, StringJobStrin
 /** Newest first — powers the customer profile's Stringing history tab. */
 export async function listJobsForCustomer(customerId: string): Promise<JobHistoryRow[]> {
   const jobs = await db.select().from(stringJobs).where(eq(stringJobs.customerId, customerId)).orderBy(desc(stringJobs.receivedOn), desc(stringJobs.createdAt));
-  const stringsMap = await stringsByJobId(jobs.map((j) => j.id));
-  return toHistoryRows(jobs, stringsMap);
+  const [stringsMap, salePaymentMap] = await Promise.all([stringsByJobId(jobs.map((j) => j.id)), salePaymentStatusByJobId(jobs)]);
+  return toHistoryRows(jobs, stringsMap, salePaymentMap);
 }
 
 /** Newest first — powers the customer racket profile's Stringing history. */
 export async function listJobsForRacket(customerRacketId: string): Promise<JobHistoryRow[]> {
   const jobs = await db.select().from(stringJobs).where(eq(stringJobs.customerRacketId, customerRacketId)).orderBy(desc(stringJobs.receivedOn), desc(stringJobs.createdAt));
-  const stringsMap = await stringsByJobId(jobs.map((j) => j.id));
-  return toHistoryRows(jobs, stringsMap);
+  const [stringsMap, salePaymentMap] = await Promise.all([stringsByJobId(jobs.map((j) => j.id)), salePaymentStatusByJobId(jobs)]);
+  return toHistoryRows(jobs, stringsMap, salePaymentMap);
 }
 
 export interface PreviousJobSetup {
