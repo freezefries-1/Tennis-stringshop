@@ -44,7 +44,16 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
     { label: "SKU", value: product.sku ?? "—" },
     { label: "Barcode", value: product.barcode ?? "—" },
     { label: "Selling price", value: product.defaultSellingPriceCents != null ? formatCents(product.defaultSellingPriceCents) : "—" },
-    { label: "Cost price", value: product.costPriceCents != null ? formatCents(product.costPriceCents) : "—" },
+    // Once stock is tracked, cost is driven by batches (each received at its
+    // own price) — the weighted average across active batches reflects what
+    // stock on hand actually cost, unlike costPriceCents (a static value set
+    // once, e.g. at product creation, that never updates as new batches
+    // come in at different prices). Untracked products have no batches, so
+    // costPriceCents — used directly as this product's COGS in that mode —
+    // is the only real figure to show.
+    product.trackInventory
+      ? { label: "Average cost", value: product.avgCostPerUnitCents != null ? formatCents(Math.round(product.avgCostPerUnitCents)) : "—" }
+      : { label: "Cost price", value: product.costPriceCents != null ? formatCents(product.costPriceCents) : "—" },
   ];
 
   const stockItems: SpecListItem[] = product.trackInventory
