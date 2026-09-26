@@ -42,6 +42,10 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
     { label: "SKU", value: product.sku ?? "—" },
     { label: "Sold as", value: unit === "set" ? "Sets" : "Reels (metres)" },
     { label: "Default selling price", value: product.defaultSellingPriceCents != null ? formatCents(product.defaultSellingPriceCents) : "—" },
+    // Weighted average across active batches — each received at its own
+    // price, so this is what stock on hand actually cost, not a single
+    // batch's price (matches the retail product page's "Average cost").
+    { label: "Average cost", value: product.avgCostPerUnitCents != null ? `${formatCents(Math.round(product.avgCostPerUnitCents))}/${unit === "set" ? "set" : "m"}` : "—" },
   ];
 
   const stockItems: SpecListItem[] = [
