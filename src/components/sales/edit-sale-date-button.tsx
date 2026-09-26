@@ -4,11 +4,15 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ds/button";
 import { updateSaleDateAction } from "@/app/sales/actions";
+import { toSGDateInputValue } from "@/lib/format";
 
 export function EditSaleDateButton({ saleId, occurredAt }: { saleId: string; occurredAt: string | Date }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [date, setDate] = useState(() => new Date(occurredAt).toISOString().slice(0, 10));
+  // The Singapore calendar date, matching what formatDate renders on the
+  // page — not toISOString().slice(0, 10), which gives the UTC date and
+  // can silently disagree by a day (see updateSaleDate's comment).
+  const [date, setDate] = useState(() => toSGDateInputValue(occurredAt));
   const [saving, setSaving] = useState(false);
 
   if (!open) {

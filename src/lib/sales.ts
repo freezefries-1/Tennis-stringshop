@@ -10,6 +10,7 @@ import {
 } from "./products";
 import { allocateStringForSale, getStringProduct, InsufficientStockError as StringInsufficientStockError, previewStock as previewStringStock, reverseStringSaleItem } from "./string-inventory";
 import { isUniqueViolation } from "./db-errors";
+import { withSGDate } from "./format";
 
 // -- revenue recognition & double-counting (read this before editing) ------
 //
@@ -321,13 +322,21 @@ export async function listPaymentsForSale(saleId: string): Promise<SalePayment[]
  * relative to each other just from a date fix. occurredAt is the sole
  * revenue date reports read (see the header comment above) and is
  * deliberately independent of a linked job's own dates, so correcting it
- * here needs no follow-on sync anywhere. */
+ * here needs no follow-on sync anywhere.
+ *
+ * newDate is a Singapore calendar date (what the date input shows, and
+ * what formatDate renders — see format.ts's comment on why every date
+ * display is pinned to Asia/Singapore explicitly) — resolved via
+ * withSGDate rather than plain Date methods, which read/write in the
+ * SERVER's own runtime timezone (UTC on Vercel) instead. Using them
+ * directly here set the UTC calendar date, which round-tripped back as a
+ * day later once formatDate rendered it whenever the row's stored
+ * time-of-day fell at or past 16:00 UTC (already past midnight in
+ * Singapore). */
 export async function updateSaleDate(saleId: string, newDate: string): Promise<Sale> {
   const [sale] = await db.select().from(sales).where(eq(sales.id, saleId)).limit(1);
   if (!sale) throw new Error("Sale not found");
-  const [year, month, day] = newDate.split("-").map(Number);
-  const occurredAt = new Date(sale.occurredAt);
-  occurredAt.setFullYear(year, month - 1, day);
+  const occurredAt = withSGDate(newDate, sale.occurredAt);
   const [updated] = await db.update(sales).set({ occurredAt, updatedAt: new Date() }).where(eq(sales.id, saleId)).returning();
   return updated;
 }
