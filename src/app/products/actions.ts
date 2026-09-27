@@ -77,6 +77,8 @@ export async function setProductArchivedAction(id: string, archived: boolean) {
   await setProductArchived(id, archived);
   revalidatePath("/products");
   revalidatePath(`/products/${id}`);
+  revalidatePath("/dashboard");
+  revalidatePath("/reports/products");
 }
 
 export interface DeleteProductResult {
@@ -87,6 +89,8 @@ export async function deleteProductAction(id: string): Promise<DeleteProductResu
   const result = await deleteProduct(id);
   if (result === "in_use") return { status: "in_use" };
   revalidatePath("/products");
+  revalidatePath("/dashboard");
+  revalidatePath("/reports/products");
   return { status: "deleted" };
 }
 
@@ -94,6 +98,8 @@ export async function receiveProductStockAction(input: ReceiveProductStockInput)
   const result = await receiveProductStock(input);
   revalidatePath("/products");
   revalidatePath(`/products/${input.productId}`);
+  revalidatePath("/dashboard");
+  revalidatePath("/reports/products");
   return result;
 }
 
@@ -112,6 +118,8 @@ export async function recordManualAdjustmentAction(input: ManualAdjustmentInput,
   }
   revalidatePath("/products");
   revalidatePath(`/products/${productId}`);
+  revalidatePath("/dashboard");
+  revalidatePath("/reports/products");
   return { status: "ok" };
 }
 
@@ -126,6 +134,8 @@ export async function updateProductBatchCostAction(input: UpdateProductBatchCost
   }
   revalidatePath("/products");
   revalidatePath(`/products/${productId}`);
+  revalidatePath("/dashboard");
+  revalidatePath("/reports/products");
   return { status: "ok" as const };
 }
 

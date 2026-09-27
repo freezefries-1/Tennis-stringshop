@@ -74,6 +74,8 @@ export async function setStringProductArchivedAction(id: string, archived: boole
   await setStringProductArchived(id, archived);
   revalidatePath("/inventory");
   revalidatePath(`/inventory/products/${id}`);
+  revalidatePath("/dashboard");
+  revalidatePath("/reports/inventory");
 }
 
 export interface DeleteProductResult {
@@ -84,6 +86,8 @@ export async function deleteStringProductAction(id: string): Promise<DeleteProdu
   const result = await deleteStringProduct(id);
   if (result === "in_use") return { status: "in_use" };
   revalidatePath("/inventory");
+  revalidatePath("/dashboard");
+  revalidatePath("/reports/inventory");
   return { status: "deleted" };
 }
 
@@ -91,6 +95,8 @@ export async function receiveStockAction(input: ReceiveStockInput) {
   const result = await receiveStock(input);
   revalidatePath("/inventory");
   revalidatePath(`/inventory/products/${input.stringProductId}`);
+  revalidatePath("/dashboard");
+  revalidatePath("/reports/inventory");
   return result;
 }
 
@@ -109,6 +115,8 @@ export async function recordManualAdjustmentAction(input: ManualAdjustmentInput,
   }
   revalidatePath("/inventory");
   revalidatePath(`/inventory/products/${productId}`);
+  revalidatePath("/dashboard");
+  revalidatePath("/reports/inventory");
   return { status: "ok" };
 }
 
@@ -123,6 +131,8 @@ export async function updateBatchCostAction(input: UpdateBatchCostInput, product
   }
   revalidatePath("/inventory");
   revalidatePath(`/inventory/products/${productId}`);
+  revalidatePath("/dashboard");
+  revalidatePath("/reports/inventory");
   return { status: "ok" as const };
 }
 
