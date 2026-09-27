@@ -173,7 +173,14 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
                     <td className="num">{formatCents(item.grossProfitCents)}</td>
                     {!isReversal ? (
                       <td>
-                        <ReturnItemPanel saleItemId={item.id} outstandingQty={outstanding} unitPriceCents={item.unitPriceCents} />
+                        <ReturnItemPanel
+                          saleItemId={item.id}
+                          outstandingQty={outstanding}
+                          quantity={Number(item.quantity)}
+                          lineTotalCents={item.lineTotalCents}
+                          saleSubtotalCents={sale.subtotalCents}
+                          saleTotalCents={sale.totalCents}
+                        />
                       </td>
                     ) : null}
                   </tr>

@@ -11,12 +11,39 @@ import { formatCents } from "@/lib/format";
 
 /** Partial-return capable (brief §33/§34) — quantity, refund amount and a
  * restock toggle for a non-resellable/damaged item (brief §35), all in one
- * small panel per line rather than a separate returns workflow. */
-export function ReturnItemPanel({ saleItemId, outstandingQty, unitPriceCents }: { saleItemId: string; outstandingQty: number; unitPriceCents: number }) {
+ * small panel per line rather than a separate returns workflow.
+ *
+ * The suggested refund is what was actually PAID for the returned
+ * quantity, not its undiscounted catalogue price — it prorates
+ * lineTotalCents (already net of this line's own discount) by the
+ * quantity being returned, then further prorates that by the sale's own
+ * total-vs-subtotal ratio to also account for a cart-wide discount
+ * entered at checkout (which lives only on the Sale, never split back
+ * onto individual lines). Still just a starting suggestion — the field
+ * stays a plain editable number for the cashier to override. */
+export function ReturnItemPanel({
+  saleItemId,
+  outstandingQty,
+  quantity,
+  lineTotalCents,
+  saleSubtotalCents,
+  saleTotalCents,
+}: {
+  saleItemId: string;
+  outstandingQty: number;
+  /** This line's original (pre-return) quantity — lineTotalCents ÷ this is
+   * the actual per-unit amount paid, after this line's own discount. */
+  quantity: number;
+  lineTotalCents: number;
+  saleSubtotalCents: number;
+  saleTotalCents: number;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [quantity, setQuantity] = useState(String(outstandingQty));
-  const [refund, setRefund] = useState(((Number(outstandingQty) || 0) * unitPriceCents / 100).toFixed(2));
+  const [quantityToReturn, setQuantityToReturn] = useState(String(outstandingQty));
+  const saleDiscountRatio = saleSubtotalCents > 0 ? saleTotalCents / saleSubtotalCents : 1;
+  const netUnitCents = quantity > 0 ? (lineTotalCents * saleDiscountRatio) / quantity : 0;
+  const [refund, setRefund] = useState((((Number(outstandingQty) || 0) * netUnitCents) / 100).toFixed(2));
   const [restock, setRestock] = useState(true);
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
@@ -42,10 +69,10 @@ export function ReturnItemPanel({ saleItemId, outstandingQty, unitPriceCents }: 
           min="0"
           max={outstandingQty}
           step="0.01"
-          value={quantity}
+          value={quantityToReturn}
           onChange={(e) => {
-            setQuantity(e.target.value);
-            setRefund(((Number(e.target.value) || 0) * unitPriceCents / 100).toFixed(2));
+            setQuantityToReturn(e.target.value);
+            setRefund(((Number(e.target.value) || 0) * netUnitCents / 100).toFixed(2));
           }}
           style={{ width: "100%" }}
         />
@@ -63,13 +90,13 @@ export function ReturnItemPanel({ saleItemId, outstandingQty, unitPriceCents }: 
       <div style={{ display: "flex", gap: 8 }}>
         <Button
           size="sm"
-          disabled={saving || !reason.trim() || Number(quantity) <= 0}
+          disabled={saving || !reason.trim() || Number(quantityToReturn) <= 0}
           onClick={async () => {
             setSaving(true);
             setError(null);
             const result = await returnSaleItemAction({
               saleItemId,
-              quantity: Number(quantity),
+              quantity: Number(quantityToReturn),
               refundCents: Math.round((Number.parseFloat(refund) || 0) * 100),
               reason,
               restock,
