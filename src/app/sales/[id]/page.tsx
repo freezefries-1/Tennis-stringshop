@@ -10,6 +10,7 @@ import { RecordPaymentPanel } from "@/components/sales/record-payment-panel";
 import { CancelSaleButton } from "@/components/sales/cancel-sale-button";
 import { EditSaleDateButton } from "@/components/sales/edit-sale-date-button";
 import { ReturnItemPanel } from "@/components/sales/return-item-panel";
+import { EditSaleItemAmountButton } from "@/components/sales/edit-sale-item-amount-button";
 import { SALE_PAYMENT_STATUS_LABEL, SALE_PAYMENT_STATUS_TONE, SALE_STATUS_LABEL, SALE_STATUS_TONE, PAYMENT_METHOD_LABEL } from "@/components/sales/sale-status";
 
 export const dynamic = "force-dynamic";
@@ -150,7 +151,7 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
                 <th className="num">Line total</th>
                 <th className="num">COGS</th>
                 <th className="num">Gross profit</th>
-                {!isReversal ? <th>Return</th> : null}
+                {!isReversal ? <th>Actions</th> : null}
               </tr>
             </thead>
             <tbody>
@@ -173,14 +174,17 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
                     <td className="num">{formatCents(item.grossProfitCents)}</td>
                     {!isReversal ? (
                       <td>
-                        <ReturnItemPanel
-                          saleItemId={item.id}
-                          outstandingQty={outstanding}
-                          quantity={Number(item.quantity)}
-                          lineTotalCents={item.lineTotalCents}
-                          saleSubtotalCents={sale.subtotalCents}
-                          saleTotalCents={sale.totalCents}
-                        />
+                        <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-start" }}>
+                          <ReturnItemPanel
+                            saleItemId={item.id}
+                            outstandingQty={outstanding}
+                            quantity={Number(item.quantity)}
+                            lineTotalCents={item.lineTotalCents}
+                            saleSubtotalCents={sale.subtotalCents}
+                            saleTotalCents={sale.totalCents}
+                          />
+                          <EditSaleItemAmountButton saleItemId={item.id} quantity={Number(item.quantity)} unitPriceCents={item.unitPriceCents} discountCents={item.discountCents} />
+                        </div>
                       </td>
                     ) : null}
                   </tr>

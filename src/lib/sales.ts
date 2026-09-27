@@ -341,6 +341,64 @@ export async function updateSaleDate(saleId: string, newDate: string): Promise<S
   return updated;
 }
 
+export interface UpdateSaleItemAmountInput {
+  saleItemId: string;
+  unitPriceCents: number;
+  discountCents: number;
+  reason: string;
+}
+
+export type UpdateSaleItemAmountResult = { ok: true; sale: Sale } | { ok: false; reason: "reversal_sale" };
+
+/** Corrects a mistyped price/discount on an already-completed sale item —
+ * quantity and cogsAmountCents (the actual units and stock cost consumed)
+ * are untouched, only what the customer was charged for them. saleItems'
+ * snapshot fields are documented as never rewritten for the ordinary life
+ * of a sale (see that table's schema comment), but a genuine data-entry
+ * mistake is the one deliberate, audited exception here — same reasoning
+ * as Edit batch for inventory batches. The line's new total rolls into
+ * the parent Sale's subtotal/total; the sale-level discount is
+ * RE-DERIVED from its own stored rule (discountType/discountValue) against
+ * the corrected subtotal, rather than shifted by a delta, so "10% off"
+ * still means 10% of the corrected total, not a stale dollar amount from
+ * the original (wrong) price. Payment status is recalculated too, since a
+ * changed total can turn a fully-paid sale into one with a balance due
+ * (or vice versa) without any new payment being recorded. Refuses on a
+ * reversal Sale (one that reverses another sale) — that row IS a return
+ * record, not an ordinary charge, and editing its "amount" has no clear
+ * meaning. */
+export async function updateSaleItemAmount(input: UpdateSaleItemAmountInput): Promise<UpdateSaleItemAmountResult> {
+  const sale = await db.transaction(async (tx) => {
+    const [item] = await tx.select().from(saleItems).where(eq(saleItems.id, input.saleItemId)).limit(1);
+    if (!item) throw new Error("Sale item not found");
+    const [original] = await tx.select().from(sales).where(eq(sales.id, item.saleId)).limit(1);
+    if (!original) throw new Error("Sale not found");
+    if (original.reversesSaleId != null) return { ok: false as const, reason: "reversal_sale" as const };
+
+    const newLineTotalCents = Math.max(0, Math.round(input.unitPriceCents * Number(item.quantity)) - input.discountCents);
+    const newGrossProfitCents = newLineTotalCents - item.cogsAmountCents;
+    await tx
+      .update(saleItems)
+      .set({ unitPriceCents: input.unitPriceCents, discountCents: input.discountCents, lineTotalCents: newLineTotalCents, grossProfitCents: newGrossProfitCents })
+      .where(eq(saleItems.id, item.id));
+
+    const newSubtotalCents = original.subtotalCents - item.lineTotalCents + newLineTotalCents;
+    const newDiscountCents = resolveDiscountCents(newSubtotalCents, original.discountType, original.discountValue != null ? Number(original.discountValue) : null);
+    const newTotalCents = newSubtotalCents - newDiscountCents;
+    const note = `Item amount corrected: "${item.descriptionSnapshot}" ${(item.lineTotalCents / 100).toFixed(2)} → ${(newLineTotalCents / 100).toFixed(2)} — ${input.reason.trim()}`;
+
+    await tx
+      .update(sales)
+      .set({ subtotalCents: newSubtotalCents, discountCents: newDiscountCents, totalCents: newTotalCents, notes: original.notes ? `${original.notes}\n${note}` : note, updatedAt: new Date() })
+      .where(eq(sales.id, original.id));
+
+    await recalcSalePaymentStatus(tx, original.id);
+    const [updated] = await tx.select().from(sales).where(eq(sales.id, original.id)).limit(1);
+    return { ok: true as const, sale: updated };
+  });
+  return sale;
+}
+
 // -- cancel --------------------------------------------------------------
 
 export type CancelSaleResult = { ok: true; sale: Sale } | { ok: false; reason: "not_found" } | { ok: false; reason: "already_paid" } | { ok: false; reason: "not_completed" };
