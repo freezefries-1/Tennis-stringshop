@@ -201,7 +201,11 @@ export async function updateJob(id: string, input: JobInput, opts?: { allowStock
         if (!old) return false; // nothing to reverse — always exactly main+cross
         return (
           old.customerSupplied !== newLine.customerSupplied ||
-          (old.stringProductId ?? null) !== (newLine.stringProductId ?? null) ||
+          // `|| null`, not `?? null` — a full-bed job's cross role always
+          // submits stringProductId as "" (see toInput's crossSource in
+          // actions.ts), which must compare equal to the DB's stored NULL,
+          // not as a false-positive "changed" role on every single edit.
+          (old.stringProductId || null) !== (newLine.stringProductId || null) ||
           Number(old.quantityUsed ?? 0) !== (Number(newLine.quantityUsed) || 0)
         );
       })
@@ -218,6 +222,20 @@ export async function updateJob(id: string, input: JobInput, opts?: { allowStock
   }
 
   const finalPriceCents = computeFinalPriceCents(input.services, input.discountCents);
+
+  // A linked Sale only needs (and — once it has a payment — only ALLOWS)
+  // resyncing when the pricing actually changed. Without this check, every
+  // edit to a paid job — even something as harmless as its due date or
+  // notes — hit resyncJobSale's SaleLockedError and rolled back the WHOLE
+  // update, blocking fields that have nothing to do with money.
+  const comparableServices = (list: { serviceName: string; quantity: string; unitPriceCents: number; totalCents: number; notes: string | null }[]) =>
+    JSON.stringify(list.map((s) => ({ serviceName: s.serviceName, quantity: s.quantity, unitPriceCents: s.unitPriceCents, totalCents: s.totalCents, notes: s.notes ?? null })));
+  const existingServicesRows = existingJob.saleId ? await db.select().from(stringJobServices).where(eq(stringJobServices.stringJobId, id)) : [];
+  const pricingChanged = existingJob.saleId
+    ? existingJob.discountCents !== input.discountCents ||
+      changedRoles.length > 0 ||
+      comparableServices(existingServicesRows) !== comparableServices(serviceValues(id, input.services))
+    : false;
 
   try {
     const job = await db.transaction(async (tx) => {
@@ -272,8 +290,12 @@ export async function updateJob(id: string, input: JobInput, opts?: { allowStock
       // fresh from string_job_inventory_allocations, which the reversals/
       // reallocations above have already brought up to date either way) in
       // the SAME transaction as the job edit itself: either both land or
-      // neither does.
-      if (row.saleId) {
+      // neither does. Only attempted when pricing actually changed — a job
+      // edit that only touches its own fields (due date, notes, machine,
+      // ...) never even calls into the Sale, so it can't be blocked by
+      // resyncJobSale's "already paid" guard for a change that was never
+      // going to touch money in the first place.
+      if (row.saleId && pricingChanged) {
         const currentAllocations = await tx.select().from(stringJobInventoryAllocations).where(and(eq(stringJobInventoryAllocations.stringJobId, id), isNull(stringJobInventoryAllocations.reversedAt)));
         const stringCogsCents = currentAllocations.reduce((sum, a) => sum + a.cogsAmountCents, 0);
         await resyncJobSale(tx, row.saleId, serviceValues(id, input.services), input.discountCents, stringCogsCents);
