@@ -1,10 +1,12 @@
 import { and, asc, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import {
+  saleItems,
   saleItemStringAllocations,
   stringInventoryBatches,
   stringInventoryMovements,
   stringJobInventoryAllocations,
+  stringJobStrings,
   stringProducts,
   suppliers,
   type stringStockUnitEnum,
@@ -114,14 +116,39 @@ export async function findDuplicateStringProduct(
 /** True, permanent deletion — reserved for a mistaken entry (brief §33).
  * Blocked by Postgres if any batch (hence any movement/allocation/job
  * link) still references the product; archiving is the everyday path. */
+/** A mistaken entry (brief §33) doesn't stop being one just because a batch
+ * got received against it before the mistake was noticed — as long as
+ * nothing has actually been sold, used in a job, or otherwise deducted from
+ * any of its batches (remainingQuantity still equals originalQuantity on
+ * every one), deleting the product takes its untouched batches and their
+ * "received"/"correction" movements down with it. The moment any real
+ * activity exists — a sale_items or string_job_strings reference, or a
+ * batch that's been drawn down from its original receipt — this refuses
+ * and the caller falls back to archiving, so real business history is
+ * never silently destroyed. */
 export async function deleteStringProduct(id: string): Promise<"deleted" | "in_use"> {
-  try {
-    await db.delete(stringProducts).where(eq(stringProducts.id, id));
-    return "deleted";
-  } catch (err) {
-    if (isForeignKeyViolation(err)) return "in_use";
-    throw err;
-  }
+  return db.transaction(async (tx) => {
+    const batches = await tx.select().from(stringInventoryBatches).where(eq(stringInventoryBatches.stringProductId, id)).for("update");
+    if (batches.some((b) => Number(b.originalQuantity) !== Number(b.remainingQuantity))) return "in_use";
+
+    const [saleItemRef] = await tx.select({ id: saleItems.id }).from(saleItems).where(eq(saleItems.stringProductId, id)).limit(1);
+    if (saleItemRef) return "in_use";
+    const [jobStringRef] = await tx.select({ id: stringJobStrings.id }).from(stringJobStrings).where(eq(stringJobStrings.stringProductId, id)).limit(1);
+    if (jobStringRef) return "in_use";
+
+    try {
+      const batchIds = batches.map((b) => b.id);
+      if (batchIds.length > 0) {
+        await tx.delete(stringInventoryMovements).where(inArray(stringInventoryMovements.batchId, batchIds));
+        await tx.delete(stringInventoryBatches).where(inArray(stringInventoryBatches.id, batchIds));
+      }
+      await tx.delete(stringProducts).where(eq(stringProducts.id, id));
+      return "deleted";
+    } catch (err) {
+      if (isForeignKeyViolation(err)) return "in_use";
+      throw err;
+    }
+  });
 }
 
 export interface StockSummary {

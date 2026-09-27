@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db/client";
-import { productCategories, productInventoryBatches, productInventoryMovements, products, saleItemInventoryAllocations, suppliers } from "@/db/schema";
+import { productCategories, productInventoryBatches, productInventoryMovements, products, saleItemInventoryAllocations, saleItems, suppliers } from "@/db/schema";
 import { getInventoryDefaults, type InventoryDefaults } from "./settings";
 import { isForeignKeyViolation } from "./db-errors";
 
@@ -172,14 +172,37 @@ export async function findDuplicateProduct(name: string, brand: string | null, v
 /** True, permanent deletion — reserved for a mistaken entry. Blocked by
  * Postgres if any batch/movement/sale item still references the product;
  * archiving is the everyday path. */
+/** A mistaken entry doesn't stop being one just because a batch got
+ * received against it before the mistake was noticed — as long as nothing
+ * has actually been sold or otherwise deducted from any of its batches
+ * (remainingQuantity still equals originalQuantity on every one), deleting
+ * the product takes its untouched batches and their "received"/
+ * "correction" movements down with it. The moment any real activity
+ * exists — a sale_items reference, or a batch that's been drawn down from
+ * its original receipt — this refuses and the caller falls back to
+ * archiving, so real business history is never silently destroyed. Same
+ * reasoning as deleteStringProduct in string-inventory.ts. */
 export async function deleteProduct(id: string): Promise<"deleted" | "in_use"> {
-  try {
-    await db.delete(products).where(eq(products.id, id));
-    return "deleted";
-  } catch (err) {
-    if (isForeignKeyViolation(err)) return "in_use";
-    throw err;
-  }
+  return db.transaction(async (tx) => {
+    const batches = await tx.select().from(productInventoryBatches).where(eq(productInventoryBatches.productId, id)).for("update");
+    if (batches.some((b) => b.originalQuantity !== b.remainingQuantity)) return "in_use";
+
+    const [saleItemRef] = await tx.select({ id: saleItems.id }).from(saleItems).where(eq(saleItems.productId, id)).limit(1);
+    if (saleItemRef) return "in_use";
+
+    try {
+      const batchIds = batches.map((b) => b.id);
+      if (batchIds.length > 0) {
+        await tx.delete(productInventoryMovements).where(inArray(productInventoryMovements.batchId, batchIds));
+        await tx.delete(productInventoryBatches).where(inArray(productInventoryBatches.id, batchIds));
+      }
+      await tx.delete(products).where(eq(products.id, id));
+      return "deleted";
+    } catch (err) {
+      if (isForeignKeyViolation(err)) return "in_use";
+      throw err;
+    }
+  });
 }
 
 export interface StockSummary {

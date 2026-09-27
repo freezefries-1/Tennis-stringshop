@@ -6,8 +6,9 @@ import { Button } from "@/components/ds/button";
 import { deleteStringProductAction } from "@/app/inventory/actions";
 
 /** Permanent delete — reserved for a mistaken entry (brief §33), separate
- * from ArchiveProductButton. Blocked server-side the moment any batch
- * exists for the product (hence any movement/allocation/job link too). */
+ * from ArchiveProductButton. Untouched receipts (nothing sold, used in a
+ * job, or otherwise deducted) are deleted along with the product; blocked
+ * server-side the moment any real activity exists on it instead. */
 export function DeleteProductButton({ productId }: { productId: string }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -18,7 +19,7 @@ export function DeleteProductButton({ productId }: { productId: string }) {
     return (
       <div className="form-danger" style={{ maxWidth: 440 }}>
         <p>
-          <strong>Delete this string product permanently?</strong> This removes it from the inventory catalogue for good — it cannot be undone. If it has any batches (even fully used up), the delete is blocked; archive it instead.
+          <strong>Delete this string product permanently?</strong> This removes it — and any stock received against it that hasn&rsquo;t been touched yet — from the inventory catalogue for good. It cannot be undone. If any of its stock has been sold, used in a job, or otherwise adjusted, the delete is blocked; archive it instead.
         </p>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <Button
@@ -32,7 +33,7 @@ export function DeleteProductButton({ productId }: { productId: string }) {
                 if (result.status === "deleted") {
                   router.push("/inventory");
                 } else {
-                  setError("This product has stock batches on file and can't be deleted — archive it instead.");
+                  setError("Some of this product's stock has been sold, used, or adjusted, so it can't be deleted — archive it instead.");
                   setConfirming(false);
                 }
               });

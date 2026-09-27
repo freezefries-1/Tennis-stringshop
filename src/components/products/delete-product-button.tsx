@@ -6,8 +6,9 @@ import { Button } from "@/components/ds/button";
 import { deleteProductAction } from "@/app/products/actions";
 
 /** Permanent delete — reserved for a mistaken entry, separate from
- * ArchiveProductButton. Blocked server-side the moment any batch/sale item
- * exists for the product. */
+ * ArchiveProductButton. Untouched receipts (nothing sold or otherwise
+ * deducted) are deleted along with the product; blocked server-side the
+ * moment any real activity exists on it instead. */
 export function DeleteProductButton({ productId }: { productId: string }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -18,7 +19,7 @@ export function DeleteProductButton({ productId }: { productId: string }) {
     return (
       <div className="form-danger" style={{ maxWidth: 440 }}>
         <p>
-          <strong>Delete this product permanently?</strong> This removes it from the catalogue for good — it cannot be undone. If it has any batches or sales on file, the delete is blocked; archive it instead.
+          <strong>Delete this product permanently?</strong> This removes it — and any stock received against it that hasn&rsquo;t been touched yet — from the catalogue for good. It cannot be undone. If any of its stock has been sold or otherwise adjusted, the delete is blocked; archive it instead.
         </p>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <Button
@@ -32,7 +33,7 @@ export function DeleteProductButton({ productId }: { productId: string }) {
                 if (result.status === "deleted") {
                   router.push("/products");
                 } else {
-                  setError("This product has stock or sales on file and can't be deleted — archive it instead.");
+                  setError("Some of this product's stock has been sold or adjusted, so it can't be deleted — archive it instead.");
                   setConfirming(false);
                 }
               });
