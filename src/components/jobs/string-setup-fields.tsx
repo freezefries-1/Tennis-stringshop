@@ -126,13 +126,13 @@ function StringLineFields({
             }
           />
           {value.stringProductId ? (
-            <Field label="Length used" htmlFor={`qty-${label}`} hint={suggestionHint(suggestedUsage, usageField, value.usageUnit) ?? (value.usageUnit === "set" ? "Whole sets consumed" : "Actual length strung, in metres")}>
+            <Field label="Length used" htmlFor={`qty-${label}`} hint={suggestionHint(suggestedUsage, usageField, value.usageUnit) ?? (value.usageUnit === "set" ? "Sets consumed — a hybrid job can split one set across main and cross (e.g. 0.5 each)" : "Actual length strung, in metres")}>
               <Input
                 id={`qty-${label}`}
                 type="number"
                 inputMode="decimal"
                 min="0"
-                step={value.usageUnit === "set" ? "1" : "0.1"}
+                step="0.1"
                 value={value.quantityUsed}
                 onChange={(e) => onChange({ quantityUsed: e.target.value })}
                 suffix={value.usageUnit === "set" ? "sets" : "m"}
