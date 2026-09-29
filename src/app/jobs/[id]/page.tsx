@@ -31,6 +31,16 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
 
   const subtotalCents = job.services.reduce((sum, s) => sum + s.totalCents, 0);
 
+  // Inventory (and so COGS) is only ever deducted the first time a job
+  // reaches "completed" (see changeJobStatus's own comment) — a job still
+  // sitting in an earlier status has a real stock-consuming line on it but
+  // genuinely hasn't cost anything YET, which reads as "this string was
+  // free" if String COGS/gross profit are just shown as $0/full revenue.
+  // Distinguish that from a job that will never have a string COGS at all
+  // (customer-supplied string, or no SportCraft stock line to begin with).
+  const hasStockConsumingLine = job.strings.some((s) => !s.customerSupplied && s.stringProductId && Number(s.quantityUsed ?? 0) > 0);
+  const stringCogsPending = hasStockConsumingLine && job.inventoryProcessedAt == null;
+
   const jobItems: SpecListItem[] = [
     { label: "Status", value: <Badge tone={JOB_STATUS_TONE[job.status]} dot>{JOB_STATUS_LABEL[job.status]}</Badge> },
     { label: "Date received", value: formatDate(job.receivedOn) },
@@ -233,7 +243,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
             <span className="num">{formatCents(job.finalPriceCents)}</span>
           </div>
 
-          {job.stringCogsCents > 0 || job.stringRevenueCents > 0 ? (
+          {job.stringCogsCents > 0 || job.stringRevenueCents > 0 || stringCogsPending ? (
             <>
               <div className="lab" style={{ marginTop: 20, marginBottom: 8 }}>
                 String cost
@@ -242,8 +252,15 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
                 dense
                 items={[
                   { label: "String revenue", value: <span className="num">{formatCents(job.stringRevenueCents)}</span> },
-                  { label: "String COGS", value: <span className="num" style={{ color: "var(--ink-500)" }}>−{formatCents(job.stringCogsCents)}</span> },
-                  { label: "String gross profit", value: <span className="num">{formatCents(job.stringGrossProfitCents)}</span> },
+                  {
+                    label: "String COGS",
+                    value: stringCogsPending ? (
+                      <span className="num" style={{ color: "var(--ink-500)" }}>Pending — set when marked completed</span>
+                    ) : (
+                      <span className="num" style={{ color: "var(--ink-500)" }}>−{formatCents(job.stringCogsCents)}</span>
+                    ),
+                  },
+                  { label: "String gross profit", value: stringCogsPending ? <span className="num">—</span> : <span className="num">{formatCents(job.stringGrossProfitCents)}</span> },
                 ]}
               />
             </>
