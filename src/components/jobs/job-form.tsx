@@ -8,6 +8,7 @@ import { Button } from "@/components/ds/button";
 import { Card } from "@/components/ds/card";
 import { CustomerPicker, type PickerCustomer } from "./customer-picker";
 import { RacketPicker } from "./racket-picker";
+import { AdditionalRacketsField } from "./additional-rackets-field";
 import { StringSetupSection } from "./string-setup-fields";
 import { ServicesEditor, lineTotalCents } from "./services-editor";
 import { KnotsSelector } from "./knots-selector";
@@ -116,6 +117,10 @@ export function JobForm({
   const [state, formAction] = useActionState(action, initialState);
   const [customer, setCustomer] = useState<PickerCustomer | null>(initialCustomer);
   const [racket, setRacket] = useState<RacketWithSpecs | null>(initialRacket);
+  // Create mode only — lets one setup/services fill-in become several
+  // independent jobs (see AdditionalRacketsField). Always empty in edit
+  // mode, where there's exactly one job being edited.
+  const [additionalRackets, setAdditionalRackets] = useState<RacketWithSpecs[]>([]);
   const [values, setValues] = useState<JobFormValues>(state.values);
   const [previousSetup, setPreviousSetup] = useState<PreviousJobSetup | null | undefined>(undefined);
   // The real per-racket suggestion (model → pattern → global), fetched
@@ -191,6 +196,7 @@ export function JobForm({
     <form ref={formRef} action={formAction} className="job-layout">
       <input type="hidden" name="customerId" value={customer?.id ?? ""} />
       <input type="hidden" name="customerRacketId" value={racket?.id ?? ""} />
+      <input type="hidden" name="additionalRacketIds" value={additionalRackets.map((r) => r.id).join(",")} />
       <input type="hidden" name="setupType" value={values.setupType} />
       <input type="hidden" name="receivedOn" value={values.receivedOn} />
       <input type="hidden" name="dueOn" value={values.dueOn} />
@@ -297,6 +303,7 @@ export function JobForm({
                 onSelect={(c) => {
                   setCustomer(c);
                   setRacket(null);
+                  setAdditionalRackets([]);
                 }}
               />
               {customer ? (
@@ -306,8 +313,12 @@ export function JobForm({
                   onSelect={(r) => {
                     setRacket(r);
                     setLoadingPrevious(!!r);
+                    if (r) setAdditionalRackets((prev) => prev.filter((p) => p.id !== r.id));
                   }}
                 />
+              ) : null}
+              {customer && racket ? (
+                <AdditionalRacketsField customerId={customer.id} primaryRacketId={racket.id} value={additionalRackets} onChange={setAdditionalRackets} />
               ) : null}
             </>
           )}

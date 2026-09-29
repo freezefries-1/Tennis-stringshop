@@ -92,10 +92,24 @@ function QuickAddRacket({ customerId, onCreated, onCancel }: { customerId: strin
   );
 }
 
-export function RacketPicker({ customerId, selected, onSelect }: { customerId: string; selected: RacketWithSpecs | null; onSelect: (r: RacketWithSpecs | null) => void }) {
+export function RacketPicker({
+  customerId,
+  selected,
+  onSelect,
+  excludeIds,
+}: {
+  customerId: string;
+  selected: RacketWithSpecs | null;
+  onSelect: (r: RacketWithSpecs | null) => void;
+  /** Rackets to hide from the results — used when this picker is adding
+   * to a list elsewhere on the same form (e.g. AdditionalRacketsField)
+   * and already-chosen rackets shouldn't be offered again. */
+  excludeIds?: string[];
+}) {
   const [rackets, setRackets] = useState<RacketWithSpecs[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [quickAdd, setQuickAdd] = useState<string | null>(null);
+  const selectable = excludeIds?.length ? (rackets ?? []).filter((r) => !excludeIds.includes(r.id)) : (rackets ?? []);
 
   useEffect(() => {
     let cancelled = false;
@@ -122,7 +136,7 @@ export function RacketPicker({ customerId, selected, onSelect }: { customerId: s
         // expecting a database-wide search was the exact confusion reported
         // — "+ Add racket" below is the only way into that search.
         placeholder={loading ? "Loading…" : "Search this customer's rackets on file"}
-        options={rackets ?? []}
+        options={selectable}
         getLabel={racketOptionLabel}
         getKey={(r) => r.id}
         selected={selected}
@@ -132,6 +146,7 @@ export function RacketPicker({ customerId, selected, onSelect }: { customerId: s
         onAddNew={(q) => setQuickAdd(q)}
       />
       {rackets && rackets.length === 0 && !loading ? <div className="row-s">No rackets on file for this customer yet.</div> : null}
+      {rackets && rackets.length > 0 && selectable.length === 0 && !loading ? <div className="row-s">All of this customer&apos;s rackets are already selected.</div> : null}
       {/* A direct, always-visible button — not just the Combobox's "type
           something to reveal + Add" affordance, which isn't obvious if you
           don't already know it's there (the confusion actually reported:

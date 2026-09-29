@@ -179,11 +179,36 @@ export async function createJobAction(prevState: JobFormState, formData: FormDat
   const error = validate(values);
   if (error) return { status: "error", message: error, values };
 
-  const job = await createJob(toInput(values));
+  // "Also string this same setup for" (AdditionalRacketsField) — the same
+  // string setup/services/notes, duplicated into a separate, independent
+  // job per extra racket. Re-checked against this customer's own rackets
+  // server-side (not just trusted off the form) so a stale/tampered id
+  // can't create a job under the wrong customer's racket.
+  const requestedAdditionalIds = new Set(
+    String(formData.get("additionalRacketIds") ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter((id) => id && id !== values.customerRacketId),
+  );
+  const validAdditionalIds = requestedAdditionalIds.size
+    ? (await listRacketsForCustomer(values.customerId)).map((r) => r.id).filter((id) => requestedAdditionalIds.has(id))
+    : [];
+
+  const input = toInput(values);
+  const job = await createJob(input);
+  for (const racketId of validAdditionalIds) {
+    await createJob({ ...input, customerRacketId: racketId });
+  }
+
   revalidatePath("/jobs");
   revalidatePath(`/customers/${values.customerId}`);
   revalidatePath(`/customers/${values.customerId}/rackets/${values.customerRacketId}`);
-  redirect(`/jobs/${job.id}`);
+  for (const racketId of validAdditionalIds) {
+    revalidatePath(`/customers/${values.customerId}/rackets/${racketId}`);
+  }
+
+  if (validAdditionalIds.length === 0) redirect(`/jobs/${job.id}`);
+  redirect("/jobs");
 }
 
 export async function updateJobAction(jobId: string, prevState: JobFormState, formData: FormData): Promise<JobFormState> {
