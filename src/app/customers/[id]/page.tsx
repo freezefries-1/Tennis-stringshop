@@ -48,7 +48,7 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
               New string job
             </Button>
           </Link>
-          <Link href="/pos">
+          <Link href={`/pos?customerId=${customer.id}`}>
             <Button size="sm" variant="secondary">
               New sale
             </Button>
