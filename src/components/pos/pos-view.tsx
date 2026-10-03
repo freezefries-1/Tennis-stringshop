@@ -50,6 +50,29 @@ const PAYMENT_METHODS: { value: PaymentMethod; label: string }[] = [
 export function PosView({ initialCustomer }: { initialCustomer: PickerCustomer | null }) {
   const router = useRouter();
   const [customer, setCustomer] = useState<PickerCustomer | null>(initialCustomer);
+  // Lifted out of PosCustomerPicker (not purely local state there) so
+  // completeSale below can tell "left blank on purpose" apart from "typed
+  // a name but never clicked a result or + Add customer" — the latter used
+  // to complete silently as a walk-in sale with the typed name just
+  // discarded, with nothing telling the cashier their customer never
+  // actually got attached.
+  const [customerQuery, setCustomerQueryRaw] = useState("");
+  const [customerQuickAddQuery, setCustomerQuickAddQuery] = useState<string | null>(null);
+  const [confirmedWalkIn, setConfirmedWalkIn] = useState(false);
+  const [showWalkInWarning, setShowWalkInWarning] = useState(false);
+
+  function setCustomerQuery(q: string) {
+    setCustomerQueryRaw(q);
+    setConfirmedWalkIn(false);
+    setShowWalkInWarning(false);
+  }
+
+  function selectCustomer(c: PickerCustomer | null) {
+    setCustomer(c);
+    setCustomerQueryRaw("");
+    setConfirmedWalkIn(false);
+    setShowWalkInWarning(false);
+  }
   const [lines, setLines] = useState<CartLine[]>([]);
   const [customDesc, setCustomDesc] = useState("");
   const [customPrice, setCustomPrice] = useState("");
@@ -122,7 +145,15 @@ export function PosView({ initialCustomer }: { initialCustomer: PickerCustomer |
     setCustomPrice("");
   }
 
-  async function completeSale(allowStockOverride = false) {
+  async function completeSale(allowStockOverride = false, skipCustomerCheck = false) {
+    // skipCustomerCheck is a direct argument, not a read of confirmedWalkIn
+    // state, because the "Continue as walk-in" button below needs to set
+    // that flag AND call completeSale in the same click — a freshly-set
+    // state value isn't visible yet inside this same render's closure.
+    if (!skipCustomerCheck && !customer && customerQuery.trim() && !confirmedWalkIn) {
+      setShowWalkInWarning(true);
+      return;
+    }
     setSaving(true);
     setError(null);
     const items: CartLineInput[] = lines.map((l) => ({
@@ -161,7 +192,46 @@ export function PosView({ initialCustomer }: { initialCustomer: PickerCustomer |
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 720 }}>
-      <PosCustomerPicker selected={customer} onSelect={setCustomer} />
+      <PosCustomerPicker
+        selected={customer}
+        onSelect={selectCustomer}
+        query={customerQuery}
+        onQueryChange={setCustomerQuery}
+        quickAddQuery={customerQuickAddQuery}
+        onQuickAddQueryChange={setCustomerQuickAddQuery}
+      />
+      {showWalkInWarning ? (
+        <div className="form-warning">
+          <p>
+            You typed &ldquo;{customerQuery.trim()}&rdquo; in the Customer field but didn&apos;t add them — completing now would record this as a walk-in sale instead, with that name not saved anywhere.
+          </p>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => {
+                setCustomerQuickAddQuery(customerQuery.trim());
+                setShowWalkInWarning(false);
+              }}
+            >
+              Add &ldquo;{customerQuery.trim()}&rdquo; as a customer
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              disabled={saving}
+              onClick={() => {
+                setConfirmedWalkIn(true);
+                setShowWalkInWarning(false);
+                completeSale(false, true);
+              }}
+            >
+              Continue as walk-in sale
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       <Card padding="16px" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         <div className="lab">Add items</div>

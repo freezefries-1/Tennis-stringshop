@@ -47,12 +47,33 @@ function QuickAddCustomer({ initialName, onCreated, onCancel }: { initialName: s
 }
 
 /** Customer is optional (brief §14 — "Walk-In or no linked customer"); the
- * default un-selected state IS "walk-in", not a required step. */
-export function PosCustomerPicker({ selected, onSelect }: { selected: PickerCustomer | null; onSelect: (c: PickerCustomer | null) => void }) {
-  const [q, setQ] = useState("");
+ * default un-selected state IS "walk-in", not a required step. query/
+ * quickAddQuery are lifted (controlled by PosView) rather than kept as
+ * purely local state, so the parent can tell "nothing typed" (a deliberate
+ * walk-in) apart from "typed a name but never clicked + Add customer or a
+ * result" (a name that's about to be silently discarded) at the moment the
+ * sale is actually completed — see PosView's completeSale. */
+export function PosCustomerPicker({
+  selected,
+  onSelect,
+  query,
+  onQueryChange,
+  quickAddQuery,
+  onQuickAddQueryChange,
+}: {
+  selected: PickerCustomer | null;
+  onSelect: (c: PickerCustomer | null) => void;
+  query: string;
+  onQueryChange: (q: string) => void;
+  quickAddQuery: string | null;
+  onQuickAddQueryChange: (q: string | null) => void;
+}) {
+  const q = query;
+  const setQ = onQueryChange;
   const [open, setOpen] = useState(false);
   const [results, setResults] = useState<PickerCustomer[]>([]);
-  const [quickAdd, setQuickAdd] = useState<string | null>(null);
+  const quickAdd = quickAddQuery;
+  const setQuickAdd = onQuickAddQueryChange;
 
   useEffect(() => {
     // A cleared search box just hides the (possibly stale) results below —
@@ -139,6 +160,7 @@ export function PosCustomerPicker({ selected, onSelect }: { selected: PickerCust
           onCreated={(c) => {
             onSelect(c);
             setQuickAdd(null);
+            setQ("");
           }}
         />
       ) : null}
