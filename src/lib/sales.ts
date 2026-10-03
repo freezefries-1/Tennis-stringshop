@@ -341,6 +341,45 @@ export async function updateSaleDate(saleId: string, newDate: string): Promise<S
   return updated;
 }
 
+export type UpdateSaleCustomerResult =
+  | { ok: true; sale: Sale; previousCustomerId: string | null }
+  | { ok: false; reason: "job_linked"; saleCode: string }
+  | { ok: false; reason: "reversal_sale" };
+
+/** Corrects who a sale is attributed to — most commonly a sale wrongly left
+ * as a walk-in that should have been attached to a real customer (a typed
+ * name that was never actually selected/added used to be silently
+ * discarded at checkout — see PosCustomerPicker's own fix). customerId
+ * null sets it back to walk-in; any other sale's customer can also just be
+ * swapped for a different one (a wrong pick at checkout). Refused when the
+ * sale is linked to a string job (stringJobId set) — that sale's customer
+ * IS the job's own customer, assigned once at job completion (createJobSale
+ * reads it straight off the job row), so editing it here independently
+ * would desync the sale from the job it was created for; fix the job's own
+ * customer instead if that's ever wrong. Also refused on a reversal sale
+ * (reversesSaleId set) — its customer is copied from the original sale at
+ * return time (see returnSaleItem) and must keep matching it. Logs the
+ * change to sales.notes, the same audited-correction pattern as
+ * updateSaleItemAmount — sales have no dedicated audit log. */
+export async function updateSaleCustomer(saleId: string, customerId: string | null): Promise<UpdateSaleCustomerResult> {
+  const [sale] = await db.select().from(sales).where(eq(sales.id, saleId)).limit(1);
+  if (!sale) throw new Error("Sale not found");
+  if (sale.stringJobId) return { ok: false, reason: "job_linked", saleCode: sale.code };
+  if (sale.reversesSaleId) return { ok: false, reason: "reversal_sale" };
+
+  const [[oldCustomer], [newCustomer]] = await Promise.all([
+    sale.customerId ? db.select().from(customers).where(eq(customers.id, sale.customerId)).limit(1) : Promise.resolve([null]),
+    customerId ? db.select().from(customers).where(eq(customers.id, customerId)).limit(1) : Promise.resolve([null]),
+  ]);
+  const note = `Customer corrected: ${oldCustomer?.name ?? "Walk-in"} → ${newCustomer?.name ?? "Walk-in"}`;
+  const [updated] = await db
+    .update(sales)
+    .set({ customerId, notes: sale.notes ? `${sale.notes}\n${note}` : note, updatedAt: new Date() })
+    .where(eq(sales.id, saleId))
+    .returning();
+  return { ok: true, sale: updated, previousCustomerId: sale.customerId };
+}
+
 export interface UpdateSaleItemAmountInput {
   saleItemId: string;
   unitPriceCents: number;

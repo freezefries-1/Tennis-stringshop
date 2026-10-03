@@ -1,7 +1,18 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { cancelSale, recordSalePayment, returnSaleItem, updateSaleDate, updateSaleItemAmount, type PaymentMethod, type ReturnItemInput, type UpdateSaleItemAmountInput } from "@/lib/sales";
+import {
+  cancelSale,
+  recordSalePayment,
+  returnSaleItem,
+  searchCustomersForPicker,
+  updateSaleCustomer,
+  updateSaleDate,
+  updateSaleItemAmount,
+  type PaymentMethod,
+  type ReturnItemInput,
+  type UpdateSaleItemAmountInput,
+} from "@/lib/sales";
 
 export async function recordPaymentAction(saleId: string, amountCents: number, paymentMethod: PaymentMethod, notes?: string) {
   await recordSalePayment({ saleId, amountCents, paymentMethod, notes });
@@ -34,6 +45,24 @@ export async function returnSaleItemAction(input: ReturnItemInput) {
   revalidatePath("/products");
   revalidatePath("/inventory");
   revalidatePath("/dashboard");
+  return result;
+}
+
+export async function fetchCustomersForSalePicker(query: string) {
+  return searchCustomersForPicker(query);
+}
+
+export async function updateSaleCustomerAction(saleId: string, customerId: string | null) {
+  const result = await updateSaleCustomer(saleId, customerId);
+  if (result.ok) {
+    revalidatePath("/sales");
+    revalidatePath(`/sales/${saleId}`);
+    revalidatePath(`/sales/${saleId}/receipt`);
+    revalidatePath("/dashboard");
+    revalidatePath("/reports/customers");
+    if (result.previousCustomerId) revalidatePath(`/customers/${result.previousCustomerId}`);
+    if (result.sale.customerId) revalidatePath(`/customers/${result.sale.customerId}`);
+  }
   return result;
 }
 

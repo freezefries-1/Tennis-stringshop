@@ -9,6 +9,7 @@ import { formatCents, formatDate } from "@/lib/format";
 import { RecordPaymentPanel } from "@/components/sales/record-payment-panel";
 import { CancelSaleButton } from "@/components/sales/cancel-sale-button";
 import { EditSaleDateButton } from "@/components/sales/edit-sale-date-button";
+import { EditSaleCustomerButton } from "@/components/sales/edit-sale-customer-button";
 import { ReturnItemPanel } from "@/components/sales/return-item-panel";
 import { EditSaleItemAmountButton } from "@/components/sales/edit-sale-item-amount-button";
 import { SALE_PAYMENT_STATUS_LABEL, SALE_PAYMENT_STATUS_TONE, SALE_STATUS_LABEL, SALE_STATUS_TONE, PAYMENT_METHOD_LABEL } from "@/components/sales/sale-status";
@@ -41,7 +42,26 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
   const infoItems: SpecListItem[] = [
     { label: "Sale number", value: <span className="num">{sale.code}</span> },
     { label: "Date", value: formatDate(sale.occurredAt) },
-    { label: "Customer", value: sale.customer ? <Link href={`/customers/${sale.customer.id}`} style={{ color: "var(--court-600)" }}>{sale.customer.name}</Link> : "Walk-in" },
+    {
+      label: "Customer",
+      value: (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          {sale.customer ? (
+            <Link href={`/customers/${sale.customer.id}`} style={{ color: "var(--court-600)" }}>
+              {sale.customer.name}
+            </Link>
+          ) : (
+            "Walk-in"
+          )}
+          <EditSaleCustomerButton
+            saleId={sale.id}
+            currentCustomer={sale.customer ? { id: sale.customer.id, code: sale.customer.code, name: sale.customer.name, phone: sale.customer.phone } : null}
+            stringJobLinked={sale.stringJobId != null}
+            isReversal={isReversal}
+          />
+        </div>
+      ),
+    },
     { label: "Linked string job", value: sale.stringJobCode ? <Link href={`/jobs/${sale.stringJobId}`} style={{ color: "var(--court-600)" }}>{sale.stringJobCode}</Link> : "—" },
     { label: "Status", value: <Badge tone={SALE_STATUS_TONE[sale.status]} dot>{SALE_STATUS_LABEL[sale.status]}</Badge> },
     { label: "Reverses sale", value: sale.reversesSaleId ? <Link href={`/sales/${sale.reversesSaleId}`} style={{ color: "var(--court-600)" }}>View original</Link> : "—" },
