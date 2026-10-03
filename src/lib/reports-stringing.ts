@@ -5,9 +5,9 @@
 // independently drift from what those pages show for the same period.
 // String Job final_price_cents is NEVER summed as revenue anywhere here.
 
-import { and, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/db/client";
-import { sales, saleItems, stringJobs, stringJobStrings, stringProducts, stringInventoryBatches } from "@/db/schema";
+import { stringJobs, stringJobServices, stringJobInventoryAllocations, stringJobStrings, stringProducts, stringInventoryBatches } from "@/db/schema";
 import { getSalesSplit, type FinancialsFilters } from "./financials";
 import { toCsv } from "./csv";
 
@@ -89,6 +89,85 @@ export interface StringUsageRow {
   inventoryValueCents: number;
 }
 
+/** Exact COGS (from string_job_inventory_allocations — real FIFO dollars
+ * already recorded per role at completion, no estimation needed) plus
+ * revenue, per SportCraft-stock string product, for every completed/
+ * collected job in the filtered period.
+ *
+ * There is no sale_items.stringProductId to join on for the revenue half —
+ * that column only gets set for the separate, unrelated itemType=
+ * 'string_product' POS-retail-reel path; a job's own string charge is
+ * always posted as itemType='string_job_service' with stringProductId left
+ * null (see insertJobServiceLines in sales.ts), so a join through it always
+ * matched nothing. This is what made the Stringing report's revenue/COGS/
+ * gross-profit columns always show $0 regardless of real job activity.
+ *
+ * A job's string charge is also just one combined "String cost" line
+ * (brief's own convention — see job-form-types.ts), not itemised per role,
+ * so there's no exact source for "how much of this line was this specific
+ * string": a full-bed job (only "main" carries a product) puts the whole
+ * line on that one product, no ambiguity; a hybrid job (two different
+ * products on main/cross) prorates that one combined line across both by
+ * each role's own quantityUsed share, which is the closest honest estimate
+ * available — same spirit as this report's existing "Estimated metres". */
+async function getStringJobFinancialsByProduct(filters: FinancialsFilters): Promise<Map<string, { revenueCents: number; cogsCents: number }>> {
+  const jobConditions = [inArray(stringJobs.status, ["completed", "collected"])];
+  if (filters.dateFrom) jobConditions.push(gte(stringJobs.completedAt, filters.dateFrom));
+  if (filters.dateTo) jobConditions.push(lt(stringJobs.completedAt, filters.dateTo));
+
+  const [cogsRows, revenueRows, roleRows] = await Promise.all([
+    db
+      .select({ stringProductId: stringInventoryBatches.stringProductId, cogs: sql<string>`coalesce(sum(${stringJobInventoryAllocations.cogsAmountCents}), 0)` })
+      .from(stringJobInventoryAllocations)
+      .innerJoin(stringJobs, eq(stringJobs.id, stringJobInventoryAllocations.stringJobId))
+      .innerJoin(stringInventoryBatches, eq(stringInventoryBatches.id, stringJobInventoryAllocations.inventoryBatchId))
+      .where(and(isNull(stringJobInventoryAllocations.reversedAt), ...jobConditions))
+      .groupBy(stringInventoryBatches.stringProductId),
+    db
+      .select({ stringJobId: stringJobServices.stringJobId, revenue: sql<string>`coalesce(sum(${stringJobServices.totalCents}), 0)` })
+      .from(stringJobServices)
+      .innerJoin(stringJobs, eq(stringJobs.id, stringJobServices.stringJobId))
+      .where(and(sql`lower(trim(${stringJobServices.serviceName})) = 'string cost'`, ...jobConditions))
+      .groupBy(stringJobServices.stringJobId),
+    db
+      .select({ stringJobId: stringJobStrings.stringJobId, stringProductId: stringJobStrings.stringProductId, quantityUsed: stringJobStrings.quantityUsed })
+      .from(stringJobStrings)
+      .innerJoin(stringJobs, eq(stringJobs.id, stringJobStrings.stringJobId))
+      .where(and(sql`${stringJobStrings.stringProductId} is not null`, ...jobConditions)),
+  ]);
+
+  const result = new Map<string, { revenueCents: number; cogsCents: number }>();
+  const add = (id: string, patch: { revenueCents?: number; cogsCents?: number }) => {
+    const cur = result.get(id) ?? { revenueCents: 0, cogsCents: 0 };
+    result.set(id, { revenueCents: cur.revenueCents + (patch.revenueCents ?? 0), cogsCents: cur.cogsCents + (patch.cogsCents ?? 0) });
+  };
+
+  for (const r of cogsRows) {
+    if (r.stringProductId) add(r.stringProductId, { cogsCents: Number(r.cogs) });
+  }
+
+  const rolesByJob = new Map<string, { stringProductId: string; quantityUsed: number }[]>();
+  for (const r of roleRows) {
+    if (!r.stringProductId) continue;
+    const list = rolesByJob.get(r.stringJobId) ?? [];
+    list.push({ stringProductId: r.stringProductId, quantityUsed: Number(r.quantityUsed ?? 0) });
+    rolesByJob.set(r.stringJobId, list);
+  }
+
+  for (const r of revenueRows) {
+    const roles = rolesByJob.get(r.stringJobId);
+    if (!roles || roles.length === 0) continue;
+    const totalQty = roles.reduce((sum, role) => sum + role.quantityUsed, 0);
+    const jobRevenueCents = Number(r.revenue);
+    for (const role of roles) {
+      const share = totalQty > 0 ? role.quantityUsed / totalQty : 1 / roles.length;
+      add(role.stringProductId, { revenueCents: Math.round(jobRevenueCents * share) });
+    }
+  }
+
+  return result;
+}
+
 /** One row per string PRODUCT (brand+name+gauge+colour) — variants stay
  * distinguishable (Phase 8 §15's "Hyper-G 1.20 vs Hyper-G 1.25" example),
  * never merged by name alone. Current stock/inventory value are point-in-
@@ -100,11 +179,7 @@ export async function listStringUsage(filters: FinancialsFilters): Promise<Strin
   if (filters.dateFrom) jobConditions.push(gte(stringJobs.completedAt, filters.dateFrom));
   if (filters.dateTo) jobConditions.push(lt(stringJobs.completedAt, filters.dateTo));
 
-  const saleConditions = [sql`${sales.status} != 'cancelled'`, eq(saleItems.itemType, "string_job_service")];
-  if (filters.dateFrom) saleConditions.push(gte(sales.occurredAt, filters.dateFrom));
-  if (filters.dateTo) saleConditions.push(lt(sales.occurredAt, filters.dateTo));
-
-  const [usageRows, financeRows, stockRows] = await Promise.all([
+  const [usageRows, financeByProduct, stockRows] = await Promise.all([
     db
       .select({
         stringProductId: stringJobStrings.stringProductId,
@@ -115,16 +190,7 @@ export async function listStringUsage(filters: FinancialsFilters): Promise<Strin
       .innerJoin(stringJobs, eq(stringJobs.id, stringJobStrings.stringJobId))
       .where(and(sql`${stringJobStrings.stringProductId} is not null`, ...jobConditions))
       .groupBy(stringJobStrings.stringProductId),
-    db
-      .select({
-        stringProductId: saleItems.stringProductId,
-        revenue: sql<string>`coalesce(sum(${saleItems.lineTotalCents}), 0)`,
-        cogs: sql<string>`coalesce(sum(${saleItems.cogsAmountCents}), 0)`,
-      })
-      .from(saleItems)
-      .innerJoin(sales, eq(sales.id, saleItems.saleId))
-      .where(and(sql`${saleItems.stringProductId} is not null`, ...saleConditions))
-      .groupBy(saleItems.stringProductId),
+    getStringJobFinancialsByProduct(filters),
     db
       .select({
         id: stringProducts.id,
@@ -144,12 +210,13 @@ export async function listStringUsage(filters: FinancialsFilters): Promise<Strin
   ]);
 
   const usageMap = new Map(usageRows.map((r) => [r.stringProductId, r]));
-  const financeMap = new Map(financeRows.map((r) => [r.stringProductId, r]));
 
   return stockRows
     .map((s) => {
       const usage = usageMap.get(s.id);
-      const finance = financeMap.get(s.id);
+      const finance = financeByProduct.get(s.id);
+      const revenueCents = finance?.revenueCents ?? 0;
+      const cogsCents = finance?.cogsCents ?? 0;
       return {
         stringProductId: s.id,
         brand: s.brand,
@@ -158,9 +225,9 @@ export async function listStringUsage(filters: FinancialsFilters): Promise<Strin
         colour: s.colour,
         jobs: usage?.jobs ?? 0,
         estimatedMetresConsumed: Number(usage?.metres ?? 0),
-        revenueCents: Number(finance?.revenue ?? 0),
-        cogsCents: Number(finance?.cogs ?? 0),
-        grossProfitCents: Number(finance?.revenue ?? 0) - Number(finance?.cogs ?? 0),
+        revenueCents,
+        cogsCents,
+        grossProfitCents: revenueCents - cogsCents,
         currentStock: Number(s.currentStock).toFixed(2),
         trackingUnit: s.trackingUnit,
         // True integer cents, no /100 — see the matching comment in
@@ -187,11 +254,7 @@ export async function listStringBrandAnalysis(filters: FinancialsFilters): Promi
   if (filters.dateFrom) jobConditions.push(gte(stringJobs.completedAt, filters.dateFrom));
   if (filters.dateTo) jobConditions.push(lt(stringJobs.completedAt, filters.dateTo));
 
-  const saleConditions = [sql`${sales.status} != 'cancelled'`, eq(saleItems.itemType, "string_job_service")];
-  if (filters.dateFrom) saleConditions.push(gte(sales.occurredAt, filters.dateFrom));
-  if (filters.dateTo) saleConditions.push(lt(sales.occurredAt, filters.dateTo));
-
-  const [usageRows, financeRows] = await Promise.all([
+  const [usageRows, financeByProduct, productBrands] = await Promise.all([
     db
       .select({
         brand: stringProducts.brand,
@@ -203,28 +266,27 @@ export async function listStringBrandAnalysis(filters: FinancialsFilters): Promi
       .innerJoin(stringProducts, eq(stringProducts.id, stringJobStrings.stringProductId))
       .where(and(...jobConditions))
       .groupBy(stringProducts.brand),
-    db
-      .select({
-        brand: stringProducts.brand,
-        revenue: sql<string>`coalesce(sum(${saleItems.lineTotalCents}), 0)`,
-        cogs: sql<string>`coalesce(sum(${saleItems.cogsAmountCents}), 0)`,
-      })
-      .from(saleItems)
-      .innerJoin(sales, eq(sales.id, saleItems.saleId))
-      .innerJoin(stringProducts, eq(stringProducts.id, saleItems.stringProductId))
-      .where(and(...saleConditions))
-      .groupBy(stringProducts.brand),
+    getStringJobFinancialsByProduct(filters),
+    db.select({ id: stringProducts.id, brand: stringProducts.brand }).from(stringProducts),
   ]);
 
-  const financeMap = new Map(financeRows.map((r) => [r.brand, r]));
-  const brands = new Set([...usageRows.map((r) => r.brand), ...financeRows.map((r) => r.brand)]);
+  const brandById = new Map(productBrands.map((p) => [p.id, p.brand]));
+  const financeByBrand = new Map<string, { revenueCents: number; cogsCents: number }>();
+  for (const [productId, finance] of financeByProduct) {
+    const brand = brandById.get(productId);
+    if (!brand) continue;
+    const cur = financeByBrand.get(brand) ?? { revenueCents: 0, cogsCents: 0 };
+    financeByBrand.set(brand, { revenueCents: cur.revenueCents + finance.revenueCents, cogsCents: cur.cogsCents + finance.cogsCents });
+  }
+
+  const brands = new Set([...usageRows.map((r) => r.brand), ...financeByBrand.keys()]);
 
   return [...brands]
     .map((brand) => {
       const usage = usageRows.find((r) => r.brand === brand);
-      const finance = financeMap.get(brand);
-      const revenueCents = Number(finance?.revenue ?? 0);
-      const cogsCents = Number(finance?.cogs ?? 0);
+      const finance = financeByBrand.get(brand);
+      const revenueCents = finance?.revenueCents ?? 0;
+      const cogsCents = finance?.cogsCents ?? 0;
       return { brand, jobs: usage?.jobs ?? 0, estimatedMetresConsumed: Number(usage?.metres ?? 0), revenueCents, cogsCents, grossProfitCents: revenueCents - cogsCents };
     })
     .sort((a, b) => b.revenueCents - a.revenueCents);
