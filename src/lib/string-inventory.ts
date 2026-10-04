@@ -390,6 +390,34 @@ export async function createSupplier(name: string, contactInfo?: string | null, 
   return row;
 }
 
+export async function renameSupplier(id: string, name: string): Promise<Supplier | null> {
+  const [row] = await db.update(suppliers).set({ name: name.trim() }).where(eq(suppliers.id, id)).returning();
+  return row ?? null;
+}
+
+/** Hidden from the Receive Stock picker (listSuppliers's default) but kept
+ * on every batch/product that already names it — same "archive first, stays
+ * out of future pickers without touching history" split used throughout
+ * (racket brands, product categories, ...). */
+export async function setSupplierActive(id: string, active: boolean): Promise<void> {
+  await db.update(suppliers).set({ active }).where(eq(suppliers.id, id));
+}
+
+/** Permanent delete — only possible while this supplier has never actually
+ * been used (no batch, string or retail, and no product's own default
+ * supplier points to it); the FK violation is what actually enforces that,
+ * same pattern as deleteRacket/deleteProductCategory. Archive it instead
+ * once it has any real history. */
+export async function deleteSupplier(id: string): Promise<"deleted" | "in_use"> {
+  try {
+    await db.delete(suppliers).where(eq(suppliers.id, id));
+    return "deleted";
+  } catch (err) {
+    if (isForeignKeyViolation(err)) return "in_use";
+    throw err;
+  }
+}
+
 // -- receiving stock -------------------------------------------------------
 
 export interface ReceiveStockInput {

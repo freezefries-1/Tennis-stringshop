@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Card } from "@/components/ds/card";
 import { Field } from "@/components/ds/field";
 import { Input } from "@/components/ds/input";
@@ -94,21 +95,26 @@ export function ReceiveProductStockForm({ products, suppliers: initialSuppliers,
         <Field label="Purchase date" htmlFor="purchaseDate">
           <Input id="purchaseDate" type="date" value={purchaseDate} onChange={(e) => setPurchaseDate(e.target.value)} style={{ width: "100%" }} />
         </Field>
-        <Combobox
-          label="Supplier"
-          placeholder="Search or add a supplier…"
-          options={suppliers}
-          getLabel={(s) => s.name}
-          getKey={(s) => s.id}
-          selected={supplier}
-          onSelect={setSupplier}
-          addNewLabel="Add supplier"
-          onAddNew={async (q) => {
-            const created = await quickCreateSupplierAction(q);
-            setSuppliers((s) => [...s, created]);
-            setSupplier(created);
-          }}
-        />
+        <div>
+          <Combobox
+            label="Supplier"
+            placeholder="Search or add a supplier…"
+            options={suppliers}
+            getLabel={(s) => s.name}
+            getKey={(s) => s.id}
+            selected={supplier}
+            onSelect={setSupplier}
+            addNewLabel="Add supplier"
+            onAddNew={async (q) => {
+              const created = await quickCreateSupplierAction(q);
+              setSuppliers((s) => [...s, created]);
+              setSupplier(created);
+            }}
+          />
+          <Link href="/suppliers" className="row-s" style={{ display: "inline-block", marginTop: 4 }}>
+            Manage suppliers
+          </Link>
+        </div>
       </div>
 
       <div className="form-grid">
