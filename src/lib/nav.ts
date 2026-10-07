@@ -20,7 +20,6 @@ export const NAV: NavItem[] = [
   { value: "sales", label: "Sales", icon: "banknote" },
   { section: "People" },
   { value: "customers", label: "Customers", icon: "users" },
-  { value: "rackets", label: "Rackets", icon: "circle-dot" },
   { section: "Stock" },
   // count is intentionally omitted here too — see the sidebar's live
   // low-stock fetch (nav-actions.ts's fetchLowStockCount), same reasoning
@@ -38,7 +37,6 @@ export const NAV: NavItem[] = [
 
 export const FOOTER_NAV: NavItem[] = [
   { value: "settings", label: "Settings", icon: "settings" },
-  { value: "checklist", label: "Phase 1 checklist", icon: "clipboard-check" },
 ];
 
 export interface PageMeta {
@@ -77,18 +75,6 @@ export const PAGES: Record<string, PageMeta> = {
     label: "People",
     action: "Add customer",
     actionHref: "/customers/new",
-  },
-  rackets: {
-    title: "Rackets",
-    label: "People",
-    action: "Add racket",
-    phase: 2,
-    builds: [
-      "Every physical frame its own ID — two identical frames stay separate",
-      "Specs: grip size, static weight, swingweight, balance",
-      "Customisation and general notes",
-      "Per-racket service history and average days between restrings",
-    ],
   },
   inventory: {
     title: "Inventory",
@@ -150,7 +136,6 @@ export const PAGES: Record<string, PageMeta> = {
     label: "Workshop",
     action: null,
   },
-  checklist: { title: "Phase 1 checklist", label: "Build", action: null },
 };
 
 export const DEFAULT_PAGE = "dashboard";
