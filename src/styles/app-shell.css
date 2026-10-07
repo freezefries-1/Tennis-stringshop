@@ -116,6 +116,15 @@ a.nav-i:hover,a.mnav-i:hover,a.sheet-i:hover,a.row:hover{color:var(--ink-700);bo
    doesn't strand that one control alone on the right of its own wrapped
    line while everything else stays left-aligned. */
 .rec-tools-push{margin-left:auto}
+/* Reports hub card grid — a fixed 3/2/1 column count (not auto-fit) so six
+   section cards always land in neat full rows instead of an uneven last
+   row, at both the desktop width rec-wrap allows and narrower ones. */
+.rep-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+@media(max-width:1180px){.rep-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){.rep-grid{grid-template-columns:minmax(0,1fr)}}
+/* Link>Card hub tiles: the global a{border-bottom} link underline (base.css)
+   would otherwise draw a stray line under every card. */
+.rep-tile{display:block;text-decoration:none;color:inherit;border-bottom:none}
 /* DateRangePicker's custom From/To pair: sits inline next to the preset
    select on desktop (room for all three on one line), but below 760px
    takes the full row width so the pair wraps onto its own line as a unit

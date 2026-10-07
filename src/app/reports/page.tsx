@@ -15,11 +15,11 @@ const SECTIONS = [
 
 export default function ReportsPage() {
   return (
-    <div className="ph-wrap">
+    <div className="rec-wrap">
       <h2 className="ph-title">Reports</h2>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16 }}>
+      <div className="rep-grid">
         {SECTIONS.map((s) => (
-          <Link key={s.href} href={s.href} style={{ textDecoration: "none", color: "inherit" }}>
+          <Link key={s.href} href={s.href} className="rep-tile">
             <Card interactive padding="20px" style={{ height: "100%" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
                 <Icon name={s.icon} size={20} color="var(--court-600)" />
