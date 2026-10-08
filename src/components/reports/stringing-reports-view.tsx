@@ -7,6 +7,7 @@ import { Tabs } from "@/components/ds/tabs";
 import { formatCents, formatCentsSigned, formatDate } from "@/lib/format";
 import { DateRangePicker } from "./date-range-picker";
 import { ExportCsvButton } from "./export-csv-button";
+import { StringUsageChart } from "./string-usage-chart";
 import { exportStringUsageCsvAction } from "@/app/reports/actions";
 import type { StringingOverview, StringUsageRow, StringBrandRow, StringSetupAnalytics } from "@/lib/reports-stringing";
 import type { RacketBrandRow, RacketSeriesRow, RacketModelRow, RestringFrequencyRow, PotentiallyDueRow } from "@/lib/reports-rackets";
@@ -81,6 +82,18 @@ export function StringingReportsView({
             <StatBlock label="Avg revenue / job" value={overview.avgRevenuePerJobCents === null ? "—" : formatCents(overview.avgRevenuePerJobCents)} icon="banknote" />
             <StatBlock label="Avg gross profit / job" value={overview.avgGrossProfitPerJobCents === null ? "—" : formatCentsSigned(overview.avgGrossProfitPerJobCents)} icon="trending-up" />
           </div>
+        </Card>
+      ) : null}
+
+      {tab === "usage" ? (
+        <Card padding="18px" style={{ marginBottom: 16 }}>
+          <div className="lab" style={{ marginBottom: 2 }}>
+            Most used strings
+          </div>
+          <div className="row-s" style={{ marginBottom: 14 }}>
+            Share of completed jobs in the selected period, by string.
+          </div>
+          <StringUsageChart rows={stringUsage} />
         </Card>
       ) : null}
 
