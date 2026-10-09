@@ -8,7 +8,9 @@ import {
   searchCustomersForPicker,
   updateSaleCustomer,
   updateSaleDate,
+  updateSaleDiscount,
   updateSaleItemAmount,
+  type DiscountType,
   type PaymentMethod,
   type ReturnItemInput,
   type UpdateSaleItemAmountInput,
@@ -62,6 +64,20 @@ export async function updateSaleCustomerAction(saleId: string, customerId: strin
     revalidatePath("/reports/customers");
     if (result.previousCustomerId) revalidatePath(`/customers/${result.previousCustomerId}`);
     if (result.sale.customerId) revalidatePath(`/customers/${result.sale.customerId}`);
+  }
+  return result;
+}
+
+export async function updateSaleDiscountAction(saleId: string, discountType: DiscountType | null, discountValue: number | null, reason: string) {
+  const result = await updateSaleDiscount(saleId, discountType, discountValue, reason);
+  if (result.ok) {
+    const sale = result.sale;
+    revalidatePath("/sales");
+    revalidatePath(`/sales/${sale.id}`);
+    revalidatePath(`/sales/${sale.id}/receipt`);
+    revalidatePath("/dashboard");
+    revalidatePath("/reports/financial");
+    if (sale.customerId) revalidatePath(`/customers/${sale.customerId}`);
   }
   return result;
 }

@@ -10,6 +10,7 @@ import { RecordPaymentPanel } from "@/components/sales/record-payment-panel";
 import { CancelSaleButton } from "@/components/sales/cancel-sale-button";
 import { EditSaleDateButton } from "@/components/sales/edit-sale-date-button";
 import { EditSaleCustomerButton } from "@/components/sales/edit-sale-customer-button";
+import { EditSaleDiscountButton } from "@/components/sales/edit-sale-discount-button";
 import { ReturnItemPanel } from "@/components/sales/return-item-panel";
 import { EditSaleItemAmountButton } from "@/components/sales/edit-sale-item-amount-button";
 import { SALE_PAYMENT_STATUS_LABEL, SALE_PAYMENT_STATUS_TONE, SALE_STATUS_LABEL, SALE_STATUS_TONE, PAYMENT_METHOD_LABEL } from "@/components/sales/sale-status";
@@ -146,7 +147,22 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
             dense
             items={[
               { label: "Subtotal", value: <span className="num">{formatCents(sale.subtotalCents)}</span> },
-              { label: "Discount", value: <span className="num">−{formatCents(sale.discountCents)}</span> },
+              {
+                label: "Discount",
+                value: (
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    <span className="num">−{formatCents(sale.discountCents)}</span>
+                    <EditSaleDiscountButton
+                      saleId={sale.id}
+                      subtotalCents={sale.subtotalCents}
+                      discountType={sale.discountType}
+                      discountValue={sale.discountValue}
+                      stringJobLinked={sale.stringJobId != null}
+                      isReversal={isReversal}
+                    />
+                  </div>
+                ),
+              },
               { label: "Total (revenue)", value: <span className="num">{formatCents(sale.totalCents)}</span> },
               { label: "COGS", value: <span className="num" style={{ color: "var(--ink-500)" }}>−{formatCents(sale.cogsCents)}</span> },
               { label: "Gross profit", value: <span className="num">{formatCents(sale.grossProfitCents)}</span> },

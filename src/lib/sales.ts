@@ -380,6 +380,50 @@ export async function updateSaleCustomer(saleId: string, customerId: string | nu
   return { ok: true, sale: updated, previousCustomerId: sale.customerId };
 }
 
+export type UpdateSaleDiscountResult = { ok: true; sale: Sale } | { ok: false; reason: "job_linked" } | { ok: false; reason: "reversal_sale" };
+
+/** Corrects the whole-sale discount rule entered at checkout — e.g. $2.50
+ * was typed instead of $0.50. Stores the same discountType/discountValue
+ * rule POS itself writes (see the checkout path above) and re-resolves
+ * discountCents/totalCents from it against the sale's current subtotal,
+ * the same resolveDiscountCents call updateSaleItemAmount uses, so "10%
+ * off" and a flat "$0.50 off" both mean exactly what they say. Refused on
+ * a job-linked sale (stringJobId set) — that sale's discount is synced
+ * from the job's own discountCents (createJobSale/resyncJobSale), so an
+ * edit made here would be silently overwritten the next time the job
+ * resyncs; fix the job's own discount instead. Also refused on a reversal
+ * sale, same reasoning as updateSaleItemAmount. Logs the change to
+ * sales.notes, the same audited-correction pattern used throughout. */
+export async function updateSaleDiscount(saleId: string, discountType: DiscountType | null, discountValue: number | null, reason: string): Promise<UpdateSaleDiscountResult> {
+  const sale = await db.transaction(async (tx) => {
+    const [original] = await tx.select().from(sales).where(eq(sales.id, saleId)).limit(1);
+    if (!original) throw new Error("Sale not found");
+    if (original.stringJobId) return { ok: false as const, reason: "job_linked" as const };
+    if (original.reversesSaleId) return { ok: false as const, reason: "reversal_sale" as const };
+
+    const newDiscountCents = resolveDiscountCents(original.subtotalCents, discountType, discountValue);
+    const newTotalCents = original.subtotalCents - newDiscountCents;
+    const note = `Discount corrected: ${(original.discountCents / 100).toFixed(2)} → ${(newDiscountCents / 100).toFixed(2)} — ${reason.trim()}`;
+
+    await tx
+      .update(sales)
+      .set({
+        discountType,
+        discountValue: discountValue != null ? discountValue.toFixed(2) : null,
+        discountCents: newDiscountCents,
+        totalCents: newTotalCents,
+        notes: original.notes ? `${original.notes}\n${note}` : note,
+        updatedAt: new Date(),
+      })
+      .where(eq(sales.id, saleId));
+
+    await recalcSalePaymentStatus(tx, saleId);
+    const [updated] = await tx.select().from(sales).where(eq(sales.id, saleId)).limit(1);
+    return { ok: true as const, sale: updated };
+  });
+  return sale;
+}
+
 export interface UpdateSaleItemAmountInput {
   saleItemId: string;
   unitPriceCents: number;
