@@ -198,3 +198,22 @@ a.nav-i:hover,a.mnav-i:hover,a.sheet-i:hover,a.row:hover{color:var(--ink-700);bo
   .job-save-sticky{position:fixed;left:0;right:0;bottom:60px;padding:12px 16px;background:var(--paper-000);border-top:1px solid var(--border-hairline);z-index:40}
 }
 @media(min-width:861px){.job-save-sticky{padding-top:4px}}
+
+/* String Job racket label — printed on a Brother P-touch (12mm x 53mm
+   tape). The on-screen preview shows the label at a readable scale with a
+   hairline border standing in for the tape edge; @page strips that border
+   and margin away and fixes the sheet to the label's own physical size, so
+   what comes out of the printer is exactly 53mm x 12mm with no extra
+   white border eating into a strip that small. */
+.label-wrap{display:flex;flex-direction:column;align-items:flex-start;gap:16px;padding:24px}
+.label-print{width:200.8px;height:45.5px;border:1px solid var(--ink-300);padding:3px 5px;display:flex;flex-direction:column;justify-content:center;gap:1px;font-family:var(--font-body);overflow:hidden;background:var(--paper-000)}
+.label-logo{font-family:var(--font-display);font-weight:700;font-size:7px;color:var(--ink-900);line-height:1}
+.label-line{font-size:7.5px;line-height:1.2;color:var(--ink-900);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media print{
+  @page{size:53mm 12mm;margin:0}
+  body{margin:0}
+  .label-wrap{padding:0}
+  .label-print{width:53mm;height:12mm;border:none;padding:0.8mm 1.2mm}
+  .label-logo{font-size:2mm}
+  .label-line{font-size:2.1mm}
+}

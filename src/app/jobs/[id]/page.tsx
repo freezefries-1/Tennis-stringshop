@@ -140,6 +140,11 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
               Edit job
             </Button>
           </Link>
+          <Link href={`/jobs/${job.id}/label`}>
+            <Button size="sm" variant="secondary" iconLeft="scan-line">
+              Print label
+            </Button>
+          </Link>
           <CancelJobButton jobId={job.id} status={job.status} />
           <DeleteJobButton jobId={job.id} />
         </div>

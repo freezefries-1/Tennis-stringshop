@@ -3,7 +3,7 @@ import { getSale } from "@/lib/sales";
 import { getJob } from "@/lib/jobs";
 import { formatCents, formatDate } from "@/lib/format";
 import { PAYMENT_METHOD_LABEL } from "@/components/sales/sale-status";
-import { PrintButton } from "@/components/sales/print-button";
+import { PrintButton } from "@/components/ds/print-button";
 
 export const dynamic = "force-dynamic";
 

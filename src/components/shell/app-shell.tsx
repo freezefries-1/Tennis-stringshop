@@ -18,6 +18,13 @@ export function AppShell({ children }: { children: ReactNode }) {
   // straight back here anyway.
   if (page === "unlock") return <>{children}</>;
 
+  // Printable pages (Sale receipt, String Job label) render their own
+  // minimal layout at an exact physical size — the sidebar/top bar/mobile
+  // nav were never meant to be part of what comes out of the printer, and
+  // with no @media print rule anywhere to hide them, they'd otherwise
+  // print right along with the receipt/label content.
+  if (pathname.endsWith("/receipt") || pathname.endsWith("/label")) return <>{children}</>;
+
   return (
     <div className="app">
       <Sidebar page={page} />
