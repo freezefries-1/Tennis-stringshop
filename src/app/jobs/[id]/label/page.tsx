@@ -1,5 +1,4 @@
 import { notFound } from "next/navigation";
-import { Dog } from "lucide-react";
 import { getJob } from "@/lib/jobs";
 import { PrintButton } from "@/components/ds/print-button";
 
@@ -58,10 +57,10 @@ export default async function JobLabelPage({ params }: { params: Promise<{ id: s
       <PrintButton icon="scan-line" />
       <div className="label-print">
         <div className="label-mascot-col">
-          {/* TEMPORARY placeholder — swap for the shop's actual mascot
-           * artwork (PNG/SVG) once provided; a generic lucide glyph until
-           * then so the rest of the layout can be reviewed now. */}
-          <Dog size={16} strokeWidth={1.5} />
+          {/* eslint-disable-next-line @next/next/no-img-element -- fixed-size
+              print label at an exact physical mm size; next/image's
+              responsive/lazy-load behavior has no benefit here. */}
+          <img src="/racket-label-mascot.png" alt="" className="label-mascot" />
           <div className="label-logo">SportCraft</div>
         </div>
         <div className="label-content-col">
