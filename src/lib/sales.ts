@@ -752,13 +752,19 @@ export async function resyncJobSale(tx: DbOrTx, saleId: string, services: JobSer
   await recalcSalePaymentStatus(tx, saleId);
 }
 
-export type AddProductToJobSaleResult = { ok: true; sale: Sale } | { ok: false; reason: "sale_locked"; saleCode: string } | { ok: false; reason: "insufficient_stock"; available: number };
+export type AddItemToSaleResult = { ok: true; sale: Sale } | { ok: false; reason: "sale_locked"; saleCode: string } | { ok: false; reason: "insufficient_stock"; available: number };
 
-/** Lets a String Job's linked Sale pick up a retail product bought at the
+/** Adds a retail product line to an already-completed Sale — originally
+ * built for a String Job's linked Sale picking up a product bought at the
  * same visit (brief §29 — "buys 1 overgrip while collecting the racket")
- * without opening a second POS sale. Blocked the same way resyncJobSale is
- * once the linked Sale has a payment on it. */
-export async function addProductToJobSale(saleId: string, productId: string, quantity: number, allowStockOverride = false): Promise<AddProductToJobSaleResult> {
+ * without opening a second POS sale, now also offered directly on the Sale
+ * detail page for any sale (nothing here is job-specific). Blocked the
+ * same way resyncJobSale is once the Sale has a payment on it — ring up a
+ * new item on an already-paid sale as its own separate sale instead. The
+ * sale-level discount is re-resolved from its own stored rule against the
+ * new subtotal, same reasoning as updateSaleItemAmount/updateSaleDiscount,
+ * so "10% off" still means 10% of the total including the new item. */
+export async function addItemToSale(saleId: string, productId: string, quantity: number, allowStockOverride = false): Promise<AddItemToSaleResult> {
   const [sale] = await db.select().from(sales).where(eq(sales.id, saleId)).limit(1);
   if (!sale) throw new Error("Sale not found");
   if (sale.paymentStatus !== "unpaid") return { ok: false, reason: "sale_locked", saleCode: sale.code };
@@ -803,8 +809,77 @@ export async function addProductToJobSale(saleId: string, productId: string, qua
     await tx.update(saleItems).set({ cogsAmountCents: cogsCents, grossProfitCents: lineTotalCents - cogsCents }).where(eq(saleItems.id, item.id));
 
     const subtotalCents = sale.subtotalCents + lineTotalCents;
-    const totalCents = sale.totalCents + lineTotalCents;
-    const [row] = await tx.update(sales).set({ subtotalCents, totalCents, updatedAt: new Date() }).where(eq(sales.id, saleId)).returning();
+    const discountCents = resolveDiscountCents(subtotalCents, sale.discountType, sale.discountValue != null ? Number(sale.discountValue) : null);
+    const totalCents = subtotalCents - discountCents;
+    const [row] = await tx.update(sales).set({ subtotalCents, discountCents, totalCents, updatedAt: new Date() }).where(eq(sales.id, saleId)).returning();
+    return row;
+  });
+  return { ok: true, sale: updated };
+}
+
+export type RemoveSaleItemResult =
+  | { ok: true; sale: Sale }
+  | { ok: false; reason: "not_found" }
+  | { ok: false; reason: "sale_locked"; saleCode: string }
+  | { ok: false; reason: "already_returned" }
+  | { ok: false; reason: "job_service_line" };
+
+/** Removes a line added by mistake — different from a return (restocked,
+ * no money has moved on an unpaid sale, so there's no refund to post and
+ * nothing in the "deliberate, audited exception that keeps a record of
+ * what was charged" category this file otherwise cares about for a paid
+ * sale). Refused once the Sale has a payment (use Return instead, so the
+ * refund stays on the audit trail) or once any quantity of this specific
+ * line has already been returned (nothing left to remove). Also refused on
+ * an itemType='string_job_service' line — that line is owned by the job's
+ * own services editor, and resyncJobSale regenerates every such line from
+ * the job's current services on the job's next edit, so a removal here
+ * would just be silently undone; edit the job's services instead.
+ *
+ * The row is never actually deleted — product_inventory_movements and
+ * string_inventory_movements both reference sale_items with NO ACTION on
+ * delete (an append-only movement log; see schema.ts), so a completed
+ * item's row can't be dropped once stock has been allocated against it.
+ * Instead: the stock allocation is reversed (restocked) same as a return,
+ * and the row is zeroed out in place (lineTotalCents/cogsAmountCents/
+ * grossProfitCents -> 0, returnedQuantity -> its full quantity, reusing the
+ * same "X returned" display every other outstanding-quantity check already
+ * uses) rather than left at its original dollar amount the way a genuine
+ * return leaves the original row — there's no separate reversing Sale here
+ * to carry the correction, so reports that sum sale_items.lineTotalCents
+ * directly (reports-products.ts et al.) need the zeroed row itself to net
+ * to the same place the sale's own adjusted subtotal does. */
+export async function removeSaleItem(saleItemId: string, reason: string): Promise<RemoveSaleItemResult> {
+  const [item] = await db.select().from(saleItems).where(eq(saleItems.id, saleItemId)).limit(1);
+  if (!item) return { ok: false, reason: "not_found" };
+  if (item.itemType === "string_job_service") return { ok: false, reason: "job_service_line" };
+  if (Number(item.returnedQuantity) > 0) return { ok: false, reason: "already_returned" };
+
+  const [sale] = await db.select().from(sales).where(eq(sales.id, item.saleId)).limit(1);
+  if (!sale) return { ok: false, reason: "not_found" };
+  if (sale.paymentStatus !== "unpaid") return { ok: false, reason: "sale_locked", saleCode: sale.code };
+
+  const updated = await db.transaction(async (tx) => {
+    let cogsReversedCents = 0;
+    if (item.itemType === "product") {
+      cogsReversedCents = await reverseAllocationsForSaleItem(tx, item.id, Number(item.quantity), `Item removed from ${sale.code} — ${reason.trim()}`, "reversal");
+    } else if (item.itemType === "string_product") {
+      cogsReversedCents = await reverseStringSaleItem(tx, item.id, Number(item.quantity), `Item removed from ${sale.code} — ${reason.trim()}`, true);
+    }
+    await tx
+      .update(saleItems)
+      .set({ returnedQuantity: item.quantity, lineTotalCents: 0, cogsAmountCents: item.cogsAmountCents - cogsReversedCents, grossProfitCents: 0 })
+      .where(eq(saleItems.id, item.id));
+
+    const subtotalCents = sale.subtotalCents - item.lineTotalCents;
+    const discountCents = resolveDiscountCents(subtotalCents, sale.discountType, sale.discountValue != null ? Number(sale.discountValue) : null);
+    const totalCents = subtotalCents - discountCents;
+    const note = `Item removed: "${item.descriptionSnapshot}" — ${reason.trim()}`;
+    const [row] = await tx
+      .update(sales)
+      .set({ subtotalCents, discountCents, totalCents, notes: sale.notes ? `${sale.notes}\n${note}` : note, updatedAt: new Date() })
+      .where(eq(sales.id, sale.id))
+      .returning();
     return row;
   });
   return { ok: true, sale: updated };

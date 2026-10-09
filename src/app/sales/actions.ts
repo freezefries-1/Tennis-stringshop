@@ -2,8 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import {
+  addItemToSale,
   cancelSale,
   recordSalePayment,
+  removeSaleItem,
   returnSaleItem,
   searchCustomersForPicker,
   updateSaleCustomer,
@@ -15,6 +17,7 @@ import {
   type ReturnItemInput,
   type UpdateSaleItemAmountInput,
 } from "@/lib/sales";
+import { searchProductsForPicker } from "@/lib/products";
 
 export async function recordPaymentAction(saleId: string, amountCents: number, paymentMethod: PaymentMethod, notes?: string) {
   await recordSalePayment({ saleId, amountCents, paymentMethod, notes });
@@ -94,5 +97,32 @@ export async function updateSaleItemAmountAction(input: UpdateSaleItemAmountInpu
     if (sale.customerId) revalidatePath(`/customers/${sale.customerId}`);
     if (sale.stringJobId) revalidatePath(`/jobs/${sale.stringJobId}`);
   }
+  return result;
+}
+
+export async function fetchProductsForSalePicker(query: string) {
+  return searchProductsForPicker(query);
+}
+
+function revalidateSaleItemPages(saleId: string, customerId: string | null) {
+  revalidatePath("/sales");
+  revalidatePath(`/sales/${saleId}`);
+  revalidatePath(`/sales/${saleId}/receipt`);
+  revalidatePath("/dashboard");
+  revalidatePath("/reports/financial");
+  revalidatePath("/products");
+  revalidatePath("/inventory");
+  if (customerId) revalidatePath(`/customers/${customerId}`);
+}
+
+export async function addItemToSaleAction(saleId: string, productId: string, quantity: number) {
+  const result = await addItemToSale(saleId, productId, quantity);
+  if (result.ok) revalidateSaleItemPages(saleId, result.sale.customerId);
+  return result;
+}
+
+export async function removeSaleItemAction(saleItemId: string, reason: string) {
+  const result = await removeSaleItem(saleItemId, reason);
+  if (result.ok) revalidateSaleItemPages(result.sale.id, result.sale.customerId);
   return result;
 }

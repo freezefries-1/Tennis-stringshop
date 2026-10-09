@@ -13,6 +13,8 @@ import { EditSaleCustomerButton } from "@/components/sales/edit-sale-customer-bu
 import { EditSaleDiscountButton } from "@/components/sales/edit-sale-discount-button";
 import { ReturnItemPanel } from "@/components/sales/return-item-panel";
 import { EditSaleItemAmountButton } from "@/components/sales/edit-sale-item-amount-button";
+import { AddSaleItemButton } from "@/components/sales/add-sale-item-button";
+import { RemoveSaleItemButton } from "@/components/sales/remove-sale-item-button";
 import { SALE_PAYMENT_STATUS_LABEL, SALE_PAYMENT_STATUS_TONE, SALE_STATUS_LABEL, SALE_STATUS_TONE, PAYMENT_METHOD_LABEL } from "@/components/sales/sale-status";
 
 export const dynamic = "force-dynamic";
@@ -171,8 +173,11 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
         </Card>
       </div>
 
-      <div className="lab" style={{ marginTop: 28, marginBottom: 10 }}>
-        Sale items
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 28, marginBottom: 10, flexWrap: "wrap", gap: 8 }}>
+        <div className="lab" style={{ marginBottom: 0 }}>
+          Sale items
+        </div>
+        {!isReversal ? <AddSaleItemButton saleId={sale.id} paymentStatus={sale.paymentStatus} /> : null}
       </div>
       <div style={{ overflowX: "auto" }}>
         <Card padding="0" style={{ display: "inline-block", minWidth: "100%" }}>
@@ -220,6 +225,7 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
                             saleTotalCents={sale.totalCents}
                           />
                           <EditSaleItemAmountButton saleItemId={item.id} quantity={Number(item.quantity)} unitPriceCents={item.unitPriceCents} discountCents={item.discountCents} />
+                          <RemoveSaleItemButton saleItemId={item.id} itemType={item.itemType} paymentStatus={sale.paymentStatus} returnedQuantity={Number(item.returnedQuantity)} />
                         </div>
                       </td>
                     ) : null}

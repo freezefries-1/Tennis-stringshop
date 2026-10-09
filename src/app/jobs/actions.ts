@@ -21,7 +21,7 @@ import { createRacket, getRacket, listRacketsForCustomer, type RacketInput } fro
 import { findCustomerByPhone, createCustomer } from "@/lib/customers";
 import { createStringProduct, searchStringProductsForPicker, type StringProductInput } from "@/lib/string-inventory";
 import { getSuggestedStringUsage } from "@/lib/string-usage";
-import { addProductToJobSale, recordSalePayment, type PaymentMethod } from "@/lib/sales";
+import { addItemToSale, recordSalePayment, type PaymentMethod } from "@/lib/sales";
 import { searchProductsForPicker } from "@/lib/products";
 import type { JobFormState, JobFormValues } from "@/lib/job-form-types";
 
@@ -299,7 +299,7 @@ export async function recordJobSalePaymentAction(saleId: string, jobId: string, 
  * bought at the same visit (an overgrip, a dampener) flows into the SAME
  * Sale instead of needing a second POS checkout. */
 export async function addProductToJobSaleAction(saleId: string, jobId: string, productId: string, quantity: number) {
-  const result = await addProductToJobSale(saleId, productId, quantity);
+  const result = await addItemToSale(saleId, productId, quantity);
   revalidatePath(`/jobs/${jobId}`);
   revalidatePath(`/sales/${saleId}`);
   revalidatePath("/dashboard");
