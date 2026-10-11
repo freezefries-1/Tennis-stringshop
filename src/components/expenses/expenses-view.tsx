@@ -58,7 +58,21 @@ export function ExpensesView({
 }) {
   const router = useRouter();
   const [q, setQ] = useState(initialQuery);
-  const dateFilter = detectPreset(initialFrom, initialTo);
+  // See the identical comment in DateRangePicker (src/components/reports/
+  // date-range-picker.tsx) — bridges the gap where "Custom range" has been
+  // selected but neither date is filled in yet, which would otherwise
+  // round-trip through the URL indistinguishable from "All time".
+  const [pendingCustom, setPendingCustom] = useState(false);
+  // "Adjusting state when a prop changes" (React's own recommended pattern
+  // for this, done during render rather than in an effect): once the URL's
+  // own from/to actually move — a real date got picked, a different preset
+  // or browser-nav took over — drop back to deriving dateFilter from props.
+  const [trackedRange, setTrackedRange] = useState([initialFrom, initialTo]);
+  if (trackedRange[0] !== initialFrom || trackedRange[1] !== initialTo) {
+    setTrackedRange([initialFrom, initialTo]);
+    setPendingCustom(false);
+  }
+  const dateFilter = pendingCustom ? "custom" : detectPreset(initialFrom, initialTo);
   const [customFrom, setCustomFrom] = useState(() => (dateFilter === "custom" && initialFrom ? toLocalDateInputValue(new Date(initialFrom)) : ""));
   const [customTo, setCustomTo] = useState(() => {
     if (dateFilter !== "custom" || !initialTo) return "";
@@ -179,7 +193,19 @@ export function ExpensesView({
           <option value="recorded">Recorded</option>
           <option value="voided">Voided</option>
         </select>
-        <select value={dateFilter} onChange={(e) => pushFilters({ dateFilter: e.target.value as DateFilterPreset, page: 1 })} style={selectStyle()}>
+        <select
+          value={dateFilter}
+          onChange={(e) => {
+            const next = e.target.value as DateFilterPreset;
+            if (next === "custom") {
+              setPendingCustom(true);
+              return;
+            }
+            setPendingCustom(false);
+            pushFilters({ dateFilter: next, page: 1 });
+          }}
+          style={selectStyle()}
+        >
           {(Object.keys(DATE_FILTER_LABEL) as DateFilterPreset[]).map((f) => (
             <option key={f} value={f}>
               {DATE_FILTER_LABEL[f]}

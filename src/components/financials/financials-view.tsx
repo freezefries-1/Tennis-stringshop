@@ -53,7 +53,21 @@ export function FinancialsView({
   initialTo: string;
 }) {
   const router = useRouter();
-  const dateFilter = detectPreset(initialFrom, initialTo);
+  // See the identical comment in DateRangePicker (src/components/reports/
+  // date-range-picker.tsx) — bridges the gap where "Custom range" has been
+  // selected but neither date is filled in yet, which would otherwise
+  // round-trip through the URL indistinguishable from "All time".
+  const [pendingCustom, setPendingCustom] = useState(false);
+  // "Adjusting state when a prop changes" (React's own recommended pattern
+  // for this, done during render rather than in an effect): once the URL's
+  // own from/to actually move — a real date got picked, a different preset
+  // or browser-nav took over — drop back to deriving dateFilter from props.
+  const [trackedRange, setTrackedRange] = useState([initialFrom, initialTo]);
+  if (trackedRange[0] !== initialFrom || trackedRange[1] !== initialTo) {
+    setTrackedRange([initialFrom, initialTo]);
+    setPendingCustom(false);
+  }
+  const dateFilter = pendingCustom ? "custom" : detectPreset(initialFrom, initialTo);
   const [customFrom, setCustomFrom] = useState(() => (dateFilter === "custom" && initialFrom ? toLocalDateInputValue(new Date(initialFrom)) : ""));
   const [customTo, setCustomTo] = useState(() => {
     if (dateFilter !== "custom" || !initialTo) return "";
@@ -72,6 +86,18 @@ export function FinancialsView({
   function pushPreset(preset: DateFilterPreset, from = customFrom, to = customTo) {
     const [start, end] = presetRange(preset, from, to);
     pushRange(start, end);
+  }
+
+  function handlePresetChange(preset: DateFilterPreset) {
+    if (preset === "custom") {
+      setPendingCustom(true);
+      return;
+    }
+    // Explicit, not left to the trackedRange adjustment above — picking a
+    // concrete preset must always clear pendingCustom even if it happens to
+    // resolve to the same from/to already in the URL.
+    setPendingCustom(false);
+    pushPreset(preset);
   }
 
   const month = singleCalendarMonth(initialFrom, initialTo);
@@ -107,7 +133,7 @@ export function FinancialsView({
           <span style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 18 }}>{DATE_FILTER_LABEL[dateFilter]}</span>
         )}
 
-        <select value={dateFilter} onChange={(e) => pushPreset(e.target.value as DateFilterPreset)} style={selectStyle()}>
+        <select value={dateFilter} onChange={(e) => handlePresetChange(e.target.value as DateFilterPreset)} style={selectStyle()}>
           {(Object.keys(DATE_FILTER_LABEL) as DateFilterPreset[]).map((f) => (
             <option key={f} value={f}>
               {DATE_FILTER_LABEL[f]}
