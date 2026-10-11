@@ -10,6 +10,7 @@ interface SalesSearchParams {
   q?: string;
   status?: string;
   paymentStatus?: string;
+  type?: string;
   from?: string;
   to?: string;
   page?: string;
@@ -31,6 +32,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
     search: sp.q ?? null,
     status: (sp.status as SaleStatus) || null,
     paymentStatus: (sp.paymentStatus as SalePaymentStatus) || null,
+    type: (sp.type as "job" | "retail") || null,
   };
 
   const [{ rows, totalCount }, summary] = await Promise.all([listSalesPage({ ...filters, page, pageSize }), getSalesSummary(filters)]);
@@ -45,6 +47,7 @@ export default async function SalesPage({ searchParams }: { searchParams: Promis
       initialQuery={sp.q ?? ""}
       initialStatus={sp.status ?? ""}
       initialPaymentStatus={sp.paymentStatus ?? ""}
+      initialType={sp.type ?? ""}
       initialFrom={sp.from ?? ""}
       initialTo={sp.to ?? ""}
     />

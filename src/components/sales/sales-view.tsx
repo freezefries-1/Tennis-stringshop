@@ -115,6 +115,7 @@ export function SalesView({
   initialQuery,
   initialStatus,
   initialPaymentStatus,
+  initialType,
   initialFrom,
   initialTo,
 }: {
@@ -126,6 +127,7 @@ export function SalesView({
   initialQuery: string;
   initialStatus: string;
   initialPaymentStatus: string;
+  initialType: string;
   initialFrom: string;
   initialTo: string;
 }) {
@@ -154,10 +156,11 @@ export function SalesView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q]);
 
-  function pushFilters(overrides: { q?: string; status?: string; paymentStatus?: string; dateFilter?: DateFilter; customFrom?: string; customTo?: string; page?: number; pageSize?: number }) {
+  function pushFilters(overrides: { q?: string; status?: string; paymentStatus?: string; type?: string; dateFilter?: DateFilter; customFrom?: string; customTo?: string; page?: number; pageSize?: number }) {
     const nextQ = overrides.q ?? q;
     const nextStatus = overrides.status ?? initialStatus;
     const nextPaymentStatus = overrides.paymentStatus ?? initialPaymentStatus;
+    const nextType = overrides.type ?? initialType;
     const nextDateFilter = overrides.dateFilter ?? dateFilter;
     const nextCustomFrom = overrides.customFrom ?? customFrom;
     const nextCustomTo = overrides.customTo ?? customTo;
@@ -169,6 +172,7 @@ export function SalesView({
     if (nextQ.trim()) params.set("q", nextQ.trim());
     if (nextStatus) params.set("status", nextStatus);
     if (nextPaymentStatus) params.set("paymentStatus", nextPaymentStatus);
+    if (nextType) params.set("type", nextType);
     if (start) params.set("from", start.toISOString());
     if (end) params.set("to", end.toISOString());
     params.set("page", String(nextPage));
@@ -201,6 +205,11 @@ export function SalesView({
           <option value="partially_paid">Partially paid</option>
           <option value="paid">Paid</option>
           <option value="refunded">Refunded</option>
+        </select>
+        <select value={initialType} onChange={(e) => pushFilters({ type: e.target.value, page: 1 })} style={selectStyle()}>
+          <option value="">String jobs &amp; retail</option>
+          <option value="job">String jobs only</option>
+          <option value="retail">Retail only</option>
         </select>
         <select value={dateFilter} onChange={(e) => pushFilters({ dateFilter: e.target.value as DateFilter, page: 1 })} style={selectStyle()}>
           {(Object.keys(DATE_FILTER_LABEL) as DateFilter[]).map((f) => (

@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { customers, productInventoryMovements, products, saleItems, salePayments, sales, stringInventoryMovements, stringJobs, stringProducts } from "@/db/schema";
 import {
@@ -944,6 +944,12 @@ export interface SalesFilters {
   search?: string | null;
   paymentStatus?: SalePaymentStatus | null;
   status?: SaleStatus | null;
+  /** "job" = stringJobId set (the job's own stringing charge, plus any
+   * retail item added onto that same sale — see addItemToSale). "retail" =
+   * stringJobId null, a sale rung up on its own at POS. There's no
+   * in-between: a sale is either created by changeJobStatus (job-linked,
+   * forever) or by checkout (not), never both. */
+  type?: "job" | "retail" | null;
 }
 
 /** Every historical Sale is a permanent record (brief: never delete/archive
@@ -956,6 +962,8 @@ function baseSalesConditions(filters: SalesFilters) {
   if (filters.dateTo) conditions.push(lt(sales.occurredAt, filters.dateTo));
   if (filters.paymentStatus) conditions.push(eq(sales.paymentStatus, filters.paymentStatus));
   if (filters.status) conditions.push(eq(sales.status, filters.status));
+  if (filters.type === "job") conditions.push(isNotNull(sales.stringJobId));
+  else if (filters.type === "retail") conditions.push(isNull(sales.stringJobId));
   const q = filters.search?.trim();
   if (q) {
     const like = `%${q}%`;
