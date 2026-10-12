@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { createCustomer, findCustomerByPhone, updateCustomer, type CustomerInput } from "@/lib/customers";
+import { createCustomer, deleteCustomer, findCustomerByPhone, setCustomerArchived, updateCustomer, type CustomerInput } from "@/lib/customers";
 import type { CustomerFormState, CustomerFormValues } from "@/lib/customer-form-types";
 
 function readValues(formData: FormData): CustomerFormValues {
@@ -57,4 +57,26 @@ export async function updateCustomerAction(id: string, prevState: CustomerFormSt
   revalidatePath("/customers");
   revalidatePath(`/customers/${id}`);
   redirect(`/customers/${id}`);
+}
+
+export async function archiveCustomerAction(customerId: string, archived: boolean) {
+  await setCustomerArchived(customerId, archived);
+  revalidatePath("/customers");
+  revalidatePath(`/customers/${customerId}`);
+}
+
+// -- permanently deleting a customer (mistaken entries only) ---------------
+
+export interface DeleteCustomerResult {
+  status: "deleted" | "in_use" | "error";
+  message?: string;
+}
+
+export async function deleteCustomerAction(customerId: string): Promise<DeleteCustomerResult> {
+  const result = await deleteCustomer(customerId);
+  if (result === "in_use") {
+    return { status: "in_use", message: "This customer has rackets, string jobs or sales on file and can't be deleted — archive them instead." };
+  }
+  revalidatePath("/customers");
+  return { status: "deleted" };
 }

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ds/input";
 import { Card } from "@/components/ds/card";
+import { Badge } from "@/components/ds/badge";
 import type { CustomerListRow } from "@/lib/customers";
 import { formatCents, formatDate } from "@/lib/format";
 
@@ -14,9 +15,12 @@ function digitsOnly(s: string) {
   return s.replace(/\D/g, "");
 }
 
-export function CustomersView({ customers }: { customers: CustomerListRow[] }) {
+export function CustomersView({ customers: allCustomers }: { customers: CustomerListRow[] }) {
   const router = useRouter();
   const [q, setQ] = useState("");
+  const [showArchived, setShowArchived] = useState(false);
+
+  const customers = showArchived ? allCustomers : allCustomers.filter((c) => !c.archivedAt);
 
   const filtered = useMemo(() => {
     const s = normalize(q);
@@ -45,6 +49,13 @@ export function CustomersView({ customers }: { customers: CustomerListRow[] }) {
         />
       </div>
 
+      {allCustomers.some((c) => c.archivedAt) ? (
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13.5, color: "var(--ink-600)" }}>
+          <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
+          Show archived
+        </label>
+      ) : null}
+
       {filtered.length === 0 ? (
         <Card>
           <div className="rec-empty">
@@ -71,7 +82,14 @@ export function CustomersView({ customers }: { customers: CustomerListRow[] }) {
                 <tbody>
                   {filtered.map((c) => (
                     <tr key={c.id} onClick={() => goTo(c.id)} tabIndex={0} onKeyDown={(e) => e.key === "Enter" && goTo(c.id)}>
-                      <td>{c.name}</td>
+                      <td>
+                        {c.name}
+                        {c.archivedAt ? (
+                          <span style={{ marginLeft: 8 }}>
+                            <Badge tone="neutral">Archived</Badge>
+                          </span>
+                        ) : null}
+                      </td>
                       <td className="num">{c.code}</td>
                       <td className="num">{c.phone}</td>
                       <td>{c.email ?? "—"}</td>
@@ -90,7 +108,14 @@ export function CustomersView({ customers }: { customers: CustomerListRow[] }) {
             {filtered.map((c) => (
               <Card key={c.id} interactive onClick={() => goTo(c.id)} className="ccard">
                 <div className="ccard-top">
-                  <span className="ccard-name">{c.name}</span>
+                  <span className="ccard-name">
+                    {c.name}
+                    {c.archivedAt ? (
+                      <span style={{ marginLeft: 8 }}>
+                        <Badge tone="neutral">Archived</Badge>
+                      </span>
+                    ) : null}
+                  </span>
                   <span className="row-s num">{c.code}</span>
                 </div>
                 <div className="ccard-meta">

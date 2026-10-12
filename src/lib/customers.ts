@@ -1,6 +1,7 @@
-import { and, desc, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { customerRackets, customers, sales, stringJobs } from "@/db/schema";
+import { isForeignKeyViolation } from "./db-errors";
 
 export interface CustomerListRow {
   id: string;
@@ -13,6 +14,7 @@ export interface CustomerListRow {
   lifetimeSpendCents: number;
   lastVisit: Date | null;
   createdAt: Date;
+  archivedAt: Date | null;
 }
 
 export interface CustomerInput {
@@ -35,8 +37,12 @@ function normalizePhone(phone: string) {
  * sum; adding finalPriceCents for those too would double-count it. Only
  * orphaned (saleId is null) completed/collected jobs are ever added here —
  * see sales.ts's revenue-recognition comment for the rest of this rule. */
-export async function listCustomers(): Promise<CustomerListRow[]> {
-  const rows = await db.select().from(customers).where(isNull(customers.archivedAt)).orderBy(desc(customers.createdAt));
+export async function listCustomers(includeArchived = false): Promise<CustomerListRow[]> {
+  const rows = await db
+    .select()
+    .from(customers)
+    .where(includeArchived ? undefined : isNull(customers.archivedAt))
+    .orderBy(desc(customers.createdAt));
   if (rows.length === 0) return [];
 
   const [racketCounts, jobStats, saleStats, unlinkedJobStats] = await Promise.all([
@@ -91,12 +97,17 @@ export async function listCustomers(): Promise<CustomerListRow[]> {
       lifetimeSpendCents: (sale?.total ?? 0) + (unlinkedJobMap.get(c.id) ?? 0),
       lastVisit,
       createdAt: c.createdAt,
+      archivedAt: c.archivedAt,
     };
   });
 }
 
+// Unlike listCustomers, this does NOT filter out archived customers — an
+// archived customer's own profile page (and the Unarchive button on it)
+// needs to keep working after archiving, the same way getRacket works for
+// an archived customer racket. Only the list views hide them.
 export async function getCustomer(id: string) {
-  const [row] = await db.select().from(customers).where(and(sql`${customers.id} = ${id}`, isNull(customers.archivedAt))).limit(1);
+  const [row] = await db.select().from(customers).where(sql`${customers.id} = ${id}`).limit(1);
   return row ?? null;
 }
 
@@ -149,6 +160,28 @@ export async function updateCustomer(id: string, input: CustomerInput) {
     .where(sql`${customers.id} = ${id}`)
     .returning();
   return row ?? null;
+}
+
+export async function setCustomerArchived(id: string, archived: boolean): Promise<void> {
+  await db
+    .update(customers)
+    .set({ archivedAt: archived ? new Date() : null })
+    .where(eq(customers.id, id));
+}
+
+/** True, permanent deletion — unlike archiving, which is reversible. Only
+ * offered in the UI for correcting a mistaken entry, not a general-purpose
+ * remove: a customer with any racket, string job or sale on file (active or
+ * archived) still has rows referencing customers.id, which Postgres rejects
+ * this against. Same pattern as rackets.ts's deleteRacket. */
+export async function deleteCustomer(id: string): Promise<"deleted" | "in_use"> {
+  try {
+    await db.delete(customers).where(eq(customers.id, id));
+    return "deleted";
+  } catch (err) {
+    if (isForeignKeyViolation(err)) return "in_use";
+    throw err;
+  }
 }
 
 /** Stats for a single customer profile — same rollups as listCustomers,

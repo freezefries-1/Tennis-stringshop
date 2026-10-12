@@ -6,9 +6,12 @@ import { listJobsForCustomer } from "@/lib/jobs";
 import { listSalesForCustomer } from "@/lib/sales";
 import { Card } from "@/components/ds/card";
 import { Button } from "@/components/ds/button";
+import { Badge } from "@/components/ds/badge";
 import { IconButton } from "@/components/ds/icon-button";
 import { SpecList, type SpecListItem } from "@/components/ds/spec-list";
 import { CustomerProfileTabs } from "@/components/customers/customer-profile-tabs";
+import { ArchiveCustomerButton } from "@/components/customers/archive-customer-button";
+import { DeleteCustomerButton } from "@/components/customers/delete-customer-button";
 import { formatCents, formatDate } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -35,7 +38,14 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
       <div className="profile-head">
         <div>
           <div className="profile-id num">{customer.code}</div>
-          <h2 className="profile-name">{customer.name}</h2>
+          <h2 className="profile-name">
+            {customer.name}
+            {customer.archivedAt ? (
+              <span style={{ marginLeft: 10 }}>
+                <Badge tone="neutral">Archived</Badge>
+              </span>
+            ) : null}
+          </h2>
         </div>
         <div className="profile-actions">
           <Link href={`/customers/${customer.id}/rackets/new`}>
@@ -56,6 +66,8 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
           <Link href={`/customers/${customer.id}/edit`}>
             <IconButton icon="pencil" label="Edit customer" variant="outline" size="sm" />
           </Link>
+          <ArchiveCustomerButton customerId={customer.id} archived={!!customer.archivedAt} />
+          <DeleteCustomerButton customerId={customer.id} />
         </div>
       </div>
 
