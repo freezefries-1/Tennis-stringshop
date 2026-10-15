@@ -433,6 +433,20 @@ export async function updateJobCompletedDate(jobId: string, newDate: string, opt
   return updated;
 }
 
+/** Corrects collectedAt's calendar day only — same backfill rationale and
+ * withSGDate handling as updateJobCompletedDate above, but with no sale to
+ * sync: nothing reads collectedAt for revenue/period reporting (it only
+ * drives this job's own "Collected" display and status history), unlike
+ * completedAt via the linked Sale's occurredAt. */
+export async function updateJobCollectedDate(jobId: string, newDate: string): Promise<StringJob> {
+  const [job] = await db.select().from(stringJobs).where(eq(stringJobs.id, jobId)).limit(1);
+  if (!job) throw new Error("Job not found");
+  if (!job.collectedAt) throw new Error("Job has not been collected yet");
+  const collectedAt = withSGDate(newDate, job.collectedAt);
+  const [updated] = await db.update(stringJobs).set({ collectedAt, updatedAt: new Date() }).where(eq(stringJobs.id, jobId)).returning();
+  return updated;
+}
+
 /** Phase 4's direct payment-status setter — refuses to write once the job
  * has a linked Sale (Phase 6), since that Sale is the financial source of
  * truth from that point on (brief §56) and this column is frozen at

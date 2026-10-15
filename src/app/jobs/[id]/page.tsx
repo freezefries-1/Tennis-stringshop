@@ -13,6 +13,7 @@ import { ChangePaymentStatusControl } from "@/components/jobs/change-payment-sta
 import { MachineSelect } from "@/components/jobs/machine-select";
 import { LinkedSalePanel } from "@/components/jobs/linked-sale-panel";
 import { EditJobCompletedDateButton } from "@/components/jobs/edit-job-completed-date-button";
+import { EditJobCollectedDateButton } from "@/components/jobs/edit-job-collected-date-button";
 import { CancelJobButton } from "@/components/jobs/cancel-job-button";
 import { DeleteJobButton } from "@/components/jobs/delete-job-button";
 import { JOB_STATUS_LABEL, JOB_STATUS_TONE } from "@/components/jobs/job-status";
@@ -57,7 +58,17 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
         "—"
       ),
     },
-    { label: "Collected", value: job.collectedAt ? formatDate(job.collectedAt) : "—" },
+    {
+      label: "Collected",
+      value: job.collectedAt ? (
+        <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8 }}>
+          {formatDate(job.collectedAt)}
+          <EditJobCollectedDateButton jobId={job.id} collectedAt={job.collectedAt} />
+        </span>
+      ) : (
+        "—"
+      ),
+    },
   ];
 
   const customerItems: SpecListItem[] = [
