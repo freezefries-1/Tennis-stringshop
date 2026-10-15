@@ -12,6 +12,7 @@ import { ChangeStatusControl } from "@/components/jobs/change-status-control";
 import { ChangePaymentStatusControl } from "@/components/jobs/change-payment-status-control";
 import { MachineSelect } from "@/components/jobs/machine-select";
 import { LinkedSalePanel } from "@/components/jobs/linked-sale-panel";
+import { EditJobCompletedDateButton } from "@/components/jobs/edit-job-completed-date-button";
 import { CancelJobButton } from "@/components/jobs/cancel-job-button";
 import { DeleteJobButton } from "@/components/jobs/delete-job-button";
 import { JOB_STATUS_LABEL, JOB_STATUS_TONE } from "@/components/jobs/job-status";
@@ -45,7 +46,17 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
     { label: "Status", value: <Badge tone={JOB_STATUS_TONE[job.status]} dot>{JOB_STATUS_LABEL[job.status]}</Badge> },
     { label: "Date received", value: formatDate(job.receivedOn) },
     { label: "Due date", value: job.dueOn ? formatDate(job.dueOn) : "—" },
-    { label: "Completed", value: job.completedAt ? formatDate(job.completedAt) : "—" },
+    {
+      label: "Completed",
+      value: job.completedAt ? (
+        <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8 }}>
+          {formatDate(job.completedAt)}
+          <EditJobCompletedDateButton jobId={job.id} completedAt={job.completedAt} />
+        </span>
+      ) : (
+        "—"
+      ),
+    },
     { label: "Collected", value: job.collectedAt ? formatDate(job.collectedAt) : "—" },
   ];
 

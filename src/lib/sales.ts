@@ -320,9 +320,13 @@ export async function listPaymentsForSale(saleId: string): Promise<SalePayment[]
  * row (set at checkout, or copied from the job's completedAt for a
  * job-linked sale) is kept as-is, so this can't reorder same-day sales
  * relative to each other just from a date fix. occurredAt is the sole
- * revenue date reports read (see the header comment above) and is
- * deliberately independent of a linked job's own dates, so correcting it
- * here needs no follow-on sync anywhere.
+ * revenue date reports read (see the header comment above).
+ *
+ * For a job-linked sale, this is the same real-world event as the job's own
+ * completedAt (brief: correcting one when backfilling historical data must
+ * correct the other), so this also pushes the same date onto the linked
+ * job — guarded by `skipJobSync` so updateJobCompletedDate's own call back
+ * into here doesn't bounce forever between the two.
  *
  * newDate is a Singapore calendar date (what the date input shows, and
  * what formatDate renders — see format.ts's comment on why every date
@@ -333,11 +337,18 @@ export async function listPaymentsForSale(saleId: string): Promise<SalePayment[]
  * day later once formatDate rendered it whenever the row's stored
  * time-of-day fell at or past 16:00 UTC (already past midnight in
  * Singapore). */
-export async function updateSaleDate(saleId: string, newDate: string): Promise<Sale> {
+export async function updateSaleDate(saleId: string, newDate: string, opts?: { skipJobSync?: boolean }): Promise<Sale> {
   const [sale] = await db.select().from(sales).where(eq(sales.id, saleId)).limit(1);
   if (!sale) throw new Error("Sale not found");
   const occurredAt = withSGDate(newDate, sale.occurredAt);
   const [updated] = await db.update(sales).set({ occurredAt, updatedAt: new Date() }).where(eq(sales.id, saleId)).returning();
+  if (!opts?.skipJobSync && updated.stringJobId) {
+    // Dynamic import (not a static one) — jobs.ts already imports from this
+    // file (createJobSale, getSale, ...), so a static import back here
+    // would be circular.
+    const { updateJobCompletedDate } = await import("./jobs");
+    await updateJobCompletedDate(updated.stringJobId, newDate, { skipSaleSync: true });
+  }
   return updated;
 }
 

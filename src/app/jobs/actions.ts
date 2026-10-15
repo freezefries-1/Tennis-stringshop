@@ -11,6 +11,7 @@ import {
   getPreviousJobForRacket,
   setJobMachine,
   updateJob,
+  updateJobCompletedDate,
   type JobInput,
   type JobPaymentStatus,
   type JobStatus,
@@ -248,6 +249,21 @@ export async function changeJobStatusAction(jobId: string, status: JobStatus, al
     revalidatePath("/dashboard");
   }
   return result;
+}
+
+export async function updateJobCompletedDateAction(jobId: string, newDate: string) {
+  const job = await updateJobCompletedDate(jobId, newDate);
+  revalidatePath("/jobs");
+  revalidatePath(`/jobs/${jobId}`);
+  revalidatePath(`/customers/${job.customerId}`);
+  revalidatePath(`/customers/${job.customerId}/rackets/${job.customerRacketId}`);
+  if (job.saleId) {
+    revalidatePath("/sales");
+    revalidatePath(`/sales/${job.saleId}`);
+    revalidatePath(`/sales/${job.saleId}/receipt`);
+  }
+  revalidatePath("/dashboard");
+  return job;
 }
 
 export async function changePaymentStatusAction(jobId: string, paymentStatus: JobPaymentStatus) {

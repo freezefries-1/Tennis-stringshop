@@ -5,8 +5,9 @@ import { getRacket, type RacketWithSpecs } from "./rackets";
 import { racketLabel } from "./racket-label";
 import { allocateForRole, InsufficientStockError, previewStock, reverseAllocationsForRole, type StockUnit } from "./string-inventory";
 import { isForeignKeyViolation } from "./db-errors";
-import { createJobSale, getSale, resyncJobSale, SaleLockedError, type SaleDetail, type SalePaymentStatus } from "./sales";
+import { createJobSale, getSale, resyncJobSale, updateSaleDate, SaleLockedError, type SaleDetail, type SalePaymentStatus } from "./sales";
 import { getSalesSplit } from "./financials";
+import { withSGDate } from "./format";
 
 export type StringJob = typeof stringJobs.$inferSelect;
 export type StringJobString = typeof stringJobStrings.$inferSelect;
@@ -407,6 +408,29 @@ export async function changeJobStatus(id: string, status: JobStatus, opts?: { al
     }
     throw err;
   }
+}
+
+/** Corrects completedAt's calendar day only — see updateSaleDate's own
+ * comment in sales.ts for why withSGDate (not plain Date methods) and why
+ * only the date, not the time-of-day, moves. This exists specifically for
+ * backfilling historical jobs entered late: changeJobStatus stamps
+ * completedAt with the moment the status change is CLICKED, so a job
+ * actually finished weeks ago but only recorded today gets today's date —
+ * counting it toward this month's "completed" stats and (via the linked
+ * Sale) this month's revenue instead of the month it actually happened in.
+ *
+ * A job-linked Sale is the same real-world event as the job's own
+ * completion, so this also pushes the same date onto the linked Sale —
+ * guarded by `skipSaleSync` so updateSaleDate's own call back into here
+ * doesn't bounce forever between the two. */
+export async function updateJobCompletedDate(jobId: string, newDate: string, opts?: { skipSaleSync?: boolean }): Promise<StringJob> {
+  const [job] = await db.select().from(stringJobs).where(eq(stringJobs.id, jobId)).limit(1);
+  if (!job) throw new Error("Job not found");
+  if (!job.completedAt) throw new Error("Job has not been completed yet");
+  const completedAt = withSGDate(newDate, job.completedAt);
+  const [updated] = await db.update(stringJobs).set({ completedAt, updatedAt: new Date() }).where(eq(stringJobs.id, jobId)).returning();
+  if (!opts?.skipSaleSync && updated.saleId) await updateSaleDate(updated.saleId, newDate, { skipJobSync: true });
+  return updated;
 }
 
 /** Phase 4's direct payment-status setter — refuses to write once the job
