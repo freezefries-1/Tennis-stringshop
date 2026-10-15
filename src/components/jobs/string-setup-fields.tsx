@@ -13,12 +13,15 @@ type UsageField = "fullBed" | "main" | "cross";
  * String Length from Actual String Used") from the editable Length used
  * field below it, which is what inventory deduction and COGS actually use. */
 function suggestionHint(suggestion: SuggestedStringUsage | null, field: UsageField, unit: "m" | "set"): string | undefined {
-  if (!suggestion) return undefined;
+  // The model/pattern/global suggestion is always a metres figure — it has
+  // nothing meaningful to say about a set-tracked string (which defaults to
+  // 1 set, not a "recommended length"), so this falls through to the
+  // caller's own set-specific hint instead of showing a misleading number.
+  if (!suggestion || unit === "set") return undefined;
   const value = field === "fullBed" ? suggestion.fullBedM : field === "main" ? suggestion.mainM : suggestion.crossM;
   const source = field === "fullBed" ? suggestion.fullBedSource : field === "main" ? suggestion.mainSource : suggestion.crossSource;
-  const suffix = unit === "set" ? "sets" : "m";
   const sourceLabel = source === "model" ? "this racket's own recommended length" : source === "pattern" ? `the ${suggestion.matchedPattern} default` : "the global default";
-  return `Suggested ${value}${suffix}, from ${sourceLabel} — override with the actual length strung`;
+  return `Suggested ${value}m, from ${sourceLabel} — override with the actual length strung`;
 }
 
 function unitSelect(value: "kg" | "lb", onChange: (v: "kg" | "lb") => void) {

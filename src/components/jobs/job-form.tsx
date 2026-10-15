@@ -19,7 +19,7 @@ import { fetchPreviousSetup, fetchSuggestedStringUsage } from "@/app/jobs/action
 import type { PreviousJobSetup } from "@/lib/jobs";
 import type { MachineOption } from "@/lib/machines";
 import type { SuggestedStringUsage } from "@/lib/string-usage";
-import { applyRepeatToValues, type JobFormState, type JobFormValues, type StringUsageDefaultsView } from "@/lib/job-form-types";
+import { applyRepeatToValues, type JobFormState, type JobFormValues, type StringLineValues, type StringUsageDefaultsView } from "@/lib/job-form-types";
 
 /** Fills in a still-blank usage field with the suggested length (brief:
  * racket model → string pattern → global default priority, resolved by
@@ -31,13 +31,37 @@ function withSuggestedUsage(values: JobFormValues, suggestion: SuggestedStringUs
   const fullBedM = suggestion?.fullBedM ?? fallback.fullBedUsageM;
   const mainM = suggestion?.mainM ?? fallback.mainUsageM;
   const crossM = suggestion?.crossM ?? fallback.crossUsageM;
+  // The model/pattern/global suggestion is always a metres figure — a
+  // set-tracked string has no equivalent "recommended length", it's just
+  // one set per full bed (or split across main/cross for a hybrid), so
+  // that metres number must never be reused as-is for a set-tracked line
+  // (e.g. the global 11m full-bed default showing up as "11 sets").
   if (values.setupType === "full") {
     if (values.main.customerSupplied || values.main.quantityUsed) return values;
-    return { ...values, main: { ...values.main, quantityUsed: String(fullBedM) } };
+    const quantityUsed = values.main.usageUnit === "set" ? "1" : String(fullBedM);
+    return { ...values, main: { ...values.main, quantityUsed } };
   }
-  const main = !values.main.customerSupplied && !values.main.quantityUsed ? { ...values.main, quantityUsed: String(mainM) } : values.main;
-  const cross = !values.cross.customerSupplied && !values.cross.quantityUsed ? { ...values.cross, quantityUsed: String(crossM) } : values.cross;
+  const main = !values.main.customerSupplied && !values.main.quantityUsed ? { ...values.main, quantityUsed: values.main.usageUnit === "set" ? "1" : String(mainM) } : values.main;
+  const cross = !values.cross.customerSupplied && !values.cross.quantityUsed ? { ...values.cross, quantityUsed: values.cross.usageUnit === "set" ? "1" : String(crossM) } : values.cross;
   return { ...values, main, cross };
+}
+
+/** withSuggestedUsage runs once, as soon as the racket (and its suggestion)
+ * loads — before the user has picked any specific string product, so it
+ * always fills quantityUsed assuming the form's default "m" unit. Selecting
+ * a string product afterwards only patches usageUnit/brand/etc, never
+ * revisiting that fill — so picking a set-tracked string left the metres
+ * figure (e.g. the global 11m full-bed default) sitting there mislabelled
+ * as "11 sets". This re-fills quantityUsed for the newly-picked unit, but
+ * only when the existing value still looks like the untouched suggestion
+ * for whatever unit it was filled under — never clobbering something the
+ * user actually typed (same "still matches the old suggestion" heuristic
+ * patchSetupType already uses for the full/hybrid switch). */
+function reconcileQuantityForUnit(current: StringLineValues, patch: Partial<StringLineValues>, metresSuggestion: number): Partial<StringLineValues> {
+  if (!patch.usageUnit || patch.usageUnit === current.usageUnit) return patch;
+  const oldWasAutoFilled = current.usageUnit === "set" ? current.quantityUsed === "1" : current.quantityUsed === "" || Number(current.quantityUsed) === metresSuggestion;
+  if (!oldWasAutoFilled) return patch;
+  return { ...patch, quantityUsed: patch.usageUnit === "set" ? "1" : String(metresSuggestion) };
 }
 
 function SubmitButton({ label }: { label: string }) {
@@ -339,8 +363,14 @@ export function JobForm({
               setupType={values.setupType}
               main={values.main}
               cross={values.cross}
-              onMainChange={(p) => patch({ main: { ...values.main, ...p } })}
-              onCrossChange={(p) => patch({ cross: { ...values.cross, ...p } })}
+              onMainChange={(p) => {
+                const metresSuggestion = values.setupType === "full" ? (suggestedUsage?.fullBedM ?? stringUsageDefaults.fullBedUsageM) : (suggestedUsage?.mainM ?? stringUsageDefaults.mainUsageM);
+                patch({ main: { ...values.main, ...reconcileQuantityForUnit(values.main, p, metresSuggestion) } });
+              }}
+              onCrossChange={(p) => {
+                const metresSuggestion = suggestedUsage?.crossM ?? stringUsageDefaults.crossUsageM;
+                patch({ cross: { ...values.cross, ...reconcileQuantityForUnit(values.cross, p, metresSuggestion) } });
+              }}
               suggestedUsage={suggestedUsage}
             />
             <KnotsSelector value={values.numberOfKnots} onChange={(v) => patch({ numberOfKnots: v })} />
