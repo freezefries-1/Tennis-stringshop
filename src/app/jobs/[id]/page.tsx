@@ -146,6 +146,8 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
               {job.customer.name}
             </Link>
             {" · "}
+            <span className="num">{job.customer.code}</span>
+            {" · "}
             <Link href={`/customers/${job.customerId}/rackets/${job.customerRacketId}`} style={{ color: "var(--court-600)" }}>
               {job.racket.code}
             </Link>
