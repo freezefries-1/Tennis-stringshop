@@ -9,7 +9,7 @@ import { Button } from "@/components/ds/button";
 import { createStringProductAction, updateStringProductAction } from "@/app/inventory/actions";
 import type { StringProduct, StockUnit } from "@/lib/string-inventory";
 
-export function ProductForm({ mode, product }: { mode: "create" | "edit"; product?: StringProduct }) {
+export function ProductForm({ mode, product, materials = [] }: { mode: "create" | "edit"; product?: StringProduct; materials?: string[] }) {
   const router = useRouter();
   const [brand, setBrand] = useState(product?.brand ?? "");
   const [name, setName] = useState(product?.name ?? "");
@@ -80,7 +80,12 @@ export function ProductForm({ mode, product }: { mode: "create" | "edit"; produc
       </div>
       <div className="form-grid">
         <Field label="Material" hint="Optional">
-          <Input value={material} onChange={(e) => setMaterial(e.target.value)} placeholder="Co-polyester" style={{ width: "100%" }} />
+          <Input list="material-options" value={material} onChange={(e) => setMaterial(e.target.value)} placeholder="Co-polyester" style={{ width: "100%" }} />
+          <datalist id="material-options">
+            {materials.map((m) => (
+              <option key={m} value={m} />
+            ))}
+          </datalist>
         </Field>
         <Field label="SKU" hint="Optional">
           <Input value={sku} onChange={(e) => setSku(e.target.value)} style={{ width: "100%" }} />

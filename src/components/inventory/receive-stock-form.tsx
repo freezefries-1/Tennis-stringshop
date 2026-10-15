@@ -24,7 +24,7 @@ function productOptionLabel(p: StringProductRow): string {
   return `${base} — ${p.trackingUnit === "set" ? "Set" : "Reel"}`;
 }
 
-export function ReceiveStockForm({ products, suppliers: initialSuppliers, initialProductId }: { products: StringProductRow[]; suppliers: Supplier[]; initialProductId?: string }) {
+export function ReceiveStockForm({ products, suppliers: initialSuppliers, initialProductId, materials = [] }: { products: StringProductRow[]; suppliers: Supplier[]; initialProductId?: string; materials?: string[] }) {
   const router = useRouter();
   const [mode, setMode] = useState<"existing" | "new">(initialProductId ? "existing" : products.length ? "existing" : "new");
   const [existingProduct, setExistingProduct] = useState<StringProductRow | null>(products.find((p) => p.id === initialProductId) ?? null);
@@ -158,7 +158,12 @@ export function ReceiveStockForm({ products, suppliers: initialSuppliers, initia
             </Field>
           </div>
           <Field label="Material" hint="Optional — polyester, multifilament, gut, ...">
-            <Input value={material} onChange={(e) => setMaterial(e.target.value)} placeholder="Co-polyester" style={{ width: "100%" }} />
+            <Input list="material-options" value={material} onChange={(e) => setMaterial(e.target.value)} placeholder="Co-polyester" style={{ width: "100%" }} />
+            <datalist id="material-options">
+              {materials.map((m) => (
+                <option key={m} value={m} />
+              ))}
+            </datalist>
           </Field>
           <Field label="Sold as">
             <div className="tabs-lite" role="tablist">
