@@ -17,7 +17,7 @@ export default async function ProductReportsPage({ searchParams }: { searchParam
   ]);
 
   return (
-    <div className="ph-wrap">
+    <div className="rec-wrap">
       <h2 className="ph-title">Product reports</h2>
       <ProductReportsView
         analytics={analytics}

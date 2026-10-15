@@ -21,7 +21,7 @@ export default async function InventoryReportsPage({ searchParams }: { searchPar
   ]);
 
   return (
-    <div className="ph-wrap">
+    <div className="rec-wrap">
       <h2 className="ph-title">Inventory reports</h2>
       <InventoryReportsView
         overview={overview}

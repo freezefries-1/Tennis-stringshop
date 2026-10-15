@@ -10,7 +10,7 @@ export default async function DataQualityPage() {
   const report = await getDataQualityReport();
 
   return (
-    <div className="ph-wrap">
+    <div className="rec-wrap">
       <h2 className="ph-title">Data quality</h2>
       <div className="rec-wrap">
         <Card padding="14px 18px" tone="sunken">

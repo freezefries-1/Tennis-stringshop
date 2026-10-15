@@ -22,7 +22,7 @@ export default async function StringingReportsPage({ searchParams }: { searchPar
   ]);
 
   return (
-    <div className="ph-wrap">
+    <div className="rec-wrap">
       <h2 className="ph-title">Stringing reports</h2>
       <StringingReportsView
         overview={overview}

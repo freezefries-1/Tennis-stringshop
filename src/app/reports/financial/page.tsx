@@ -21,7 +21,7 @@ export default async function FinancialReportsPage({ searchParams }: { searchPar
   ]);
 
   return (
-    <div className="ph-wrap">
+    <div className="rec-wrap">
       <h2 className="ph-title">Financial reports</h2>
       <FinancialReportsView
         summary={summary}

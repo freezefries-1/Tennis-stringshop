@@ -11,7 +11,7 @@ export default async function CustomerReportsPage({ searchParams }: { searchPara
   const [summary, performance] = await Promise.all([getCustomerAnalyticsSummary(filters), listCustomerPerformance(filters)]);
 
   return (
-    <div className="ph-wrap">
+    <div className="rec-wrap">
       <h2 className="ph-title">Customer reports</h2>
       <CustomerReportsView summary={summary} performance={performance} initialFrom={sp.from ?? ""} initialTo={sp.to ?? ""} />
     </div>
