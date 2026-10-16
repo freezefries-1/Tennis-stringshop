@@ -1,6 +1,6 @@
-import { and, eq, gte, lt, sql } from "drizzle-orm";
+import { and, eq, gte, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/db/client";
-import { sales, saleItems, expenses, otherIncome } from "@/db/schema";
+import { sales, saleItems, expenses, otherIncome, stringJobs } from "@/db/schema";
 import { getSalesSummary, type SalesFilters } from "./sales";
 import { getExpenseSummary, type ExpenseCategoryAmount } from "./expenses";
 import { getOtherIncomeTotalCents } from "./other-income";
@@ -282,6 +282,17 @@ export interface MonthlyTrendRow {
   operatingExpensesCents: number;
   otherIncomeCents: number;
   netProfitCents: number;
+  /** Same definition as the Dashboard/Jobs "completed this month" count
+   * (getJobStats) — bucketed by stringJobs.completedAt, which is set once
+   * the first time a job reaches "completed" and never cleared by a later
+   * status change, so a job later cancelled after once completing still
+   * counts here (matching that existing stat, not a stricter new rule). */
+  jobsCompletedCount: number;
+  /** Sales with no linked string job (the Sales page's own "Retail only"
+   * filter) — excludes cancelled sales and reversal rows (a return/refund
+   * isn't a new retail sale "made"), same primaryWhere convention
+   * listSalesPage uses. */
+  retailSalesCount: number;
 }
 
 /** Oldest first, ending at (and including) the given year/month —
@@ -339,9 +350,17 @@ export async function getMonthlyTrend(monthsBack = 6, endYear?: number, endMonth
     targets.map((t, i) => sql`when ${otherIncome.incomeDate} >= ${toDateStr(t.start)} and ${otherIncome.incomeDate} < ${toDateStr(t.end)} then ${i}`),
     sql` `,
   );
+  // stringJobs.completedAt is timestamptz, same ISO-string treatment as
+  // sales.occurredAt above (not the plain-DATE treatment expenses/
+  // otherIncome need).
+  const jobBucket = sql.join(
+    targets.map((t, i) => sql`when ${stringJobs.completedAt} >= ${t.start.toISOString()} and ${stringJobs.completedAt} < ${t.end.toISOString()} then ${i}`),
+    sql` `,
+  );
   const salesIdx = sql<number>`case ${salesBucket} end`;
   const expenseIdx = sql<number>`case ${expenseBucket} end`;
   const incomeIdx = sql<number>`case ${incomeBucket} end`;
+  const jobIdx = sql<number>`case ${jobBucket} end`;
 
   // Grouped by ordinal position (`1`), not by repeating the CASE expression
   // — Postgres validates a non-aggregated SELECT column against GROUP BY by
@@ -376,6 +395,19 @@ export async function getMonthlyTrend(monthsBack = 6, endYear?: number, endMonth
       .groupBy(sql`1`),
   ]);
 
+  const [jobCountRows, retailCountRows] = await Promise.all([
+    db
+      .select({ idx: jobIdx, count: sql<number>`count(*)::int` })
+      .from(stringJobs)
+      .where(and(gte(stringJobs.completedAt, overallStart), lt(stringJobs.completedAt, overallEnd)))
+      .groupBy(sql`1`),
+    db
+      .select({ idx: salesIdx, count: sql<number>`count(*)::int` })
+      .from(sales)
+      .where(and(sql`${sales.status} != 'cancelled'`, isNull(sales.stringJobId), isNull(sales.reversesSaleId), gte(sales.occurredAt, overallStart), lt(sales.occurredAt, overallEnd)))
+      .groupBy(sql`1`),
+  ]);
+
   // Number(r.idx) — the CASE branch's integer literal comes back from
   // postgres.js as a string despite the sql<number> annotation (its
   // resulting type OID is ambiguous to the driver), so comparing it
@@ -387,6 +419,9 @@ export async function getMonthlyTrend(monthsBack = 6, endYear?: number, endMonth
   const cogsMap = toMap(cogsRows);
   const expenseMap = toMap(expenseRows);
   const incomeMap = toMap(incomeRows);
+  const countMap = (rows: { idx: number; count: number }[]) => new Map(rows.map((r) => [Number(r.idx), r.count]));
+  const jobCountMap = countMap(jobCountRows);
+  const retailCountMap = countMap(retailCountRows);
 
   return targets.map((t, i) => {
     const netSalesRevenueCents = revenueMap.get(i) ?? 0;
@@ -405,6 +440,8 @@ export async function getMonthlyTrend(monthsBack = 6, endYear?: number, endMonth
       operatingExpensesCents,
       otherIncomeCents,
       netProfitCents,
+      jobsCompletedCount: jobCountMap.get(i) ?? 0,
+      retailSalesCount: retailCountMap.get(i) ?? 0,
     };
   });
 }
@@ -477,7 +514,7 @@ export async function getPeriodComparison(filters: FinancialsFilters, current?: 
 export async function exportMonthlyTrendCsv(monthsBack = 12): Promise<string> {
   const rows = await getMonthlyTrend(monthsBack);
   return toCsv(
-    ["Month", "Net revenue (cents)", "COGS (cents)", "Gross profit (cents)", "Operating expenses (cents)", "Other income (cents)", "Net profit (cents)"],
-    rows.map((r) => [r.label, r.netSalesRevenueCents, r.cogsCents, r.grossProfitCents, r.operatingExpensesCents, r.otherIncomeCents, r.netProfitCents]),
+    ["Month", "Net revenue (cents)", "COGS (cents)", "Gross profit (cents)", "Operating expenses (cents)", "Other income (cents)", "Net profit (cents)", "String jobs completed", "Retail sales"],
+    rows.map((r) => [r.label, r.netSalesRevenueCents, r.cogsCents, r.grossProfitCents, r.operatingExpensesCents, r.otherIncomeCents, r.netProfitCents, r.jobsCompletedCount, r.retailSalesCount]),
   );
 }

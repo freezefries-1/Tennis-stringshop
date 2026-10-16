@@ -188,6 +188,8 @@ export function FinancialReportsView({
                   <th className="num">Expenses</th>
                   <th className="num">Net profit</th>
                   <th className="num">Net margin</th>
+                  <th className="num">String jobs</th>
+                  <th className="num">Retail sales</th>
                 </tr>
               </thead>
               <tbody>
@@ -204,6 +206,8 @@ export function FinancialReportsView({
                       <td className="num">{formatCents(m.operatingExpensesCents)}</td>
                       <td className="num">{formatCentsSigned(m.netProfitCents)}</td>
                       <td className="num">{pctLabel(netMarginPct)}</td>
+                      <td className="num">{m.jobsCompletedCount}</td>
+                      <td className="num">{m.retailSalesCount}</td>
                     </tr>
                   );
                 })}
