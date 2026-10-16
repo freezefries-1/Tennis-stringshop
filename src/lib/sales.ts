@@ -316,6 +316,44 @@ export async function listPaymentsForSale(saleId: string): Promise<SalePayment[]
   return db.select().from(salePayments).where(eq(salePayments.saleId, saleId)).orderBy(desc(salePayments.paymentDate));
 }
 
+export interface UpdateSalePaymentAmountInput {
+  paymentId: string;
+  amountCents: number;
+  reason: string;
+}
+
+export type UpdateSalePaymentAmountResult = { ok: true; sale: Sale } | { ok: false; reason: "reversal_sale" };
+
+/** Corrects a mistyped payment amount — same "genuine data-entry mistake is
+ * the one deliberate, audited exception" reasoning as updateSaleItemAmount
+ * above, and the same fix: nothing references sale_payments.id and there's
+ * no dedicated audit log for it, so the old → new amount and the reason are
+ * appended to the Sale's own notes instead. paymentStatus is always
+ * recomputed from the sum (never set by hand, same as recordSalePayment),
+ * so fixing a typo that left a Sale stuck on "Partially paid" naturally
+ * resolves it back to "Paid" once the real amount is in. Refuses on a
+ * reversal Sale for the same reason updateSaleItemAmount does. */
+export async function updateSalePaymentAmount(input: UpdateSalePaymentAmountInput): Promise<UpdateSalePaymentAmountResult> {
+  return db.transaction(async (tx) => {
+    const [payment] = await tx.select().from(salePayments).where(eq(salePayments.id, input.paymentId)).limit(1);
+    if (!payment) throw new Error("Payment not found");
+    const [sale] = await tx.select().from(sales).where(eq(sales.id, payment.saleId)).limit(1);
+    if (!sale) throw new Error("Sale not found");
+    if (sale.reversesSaleId != null) return { ok: false as const, reason: "reversal_sale" as const };
+
+    const note = `Payment amount corrected: ${(payment.amountCents / 100).toFixed(2)} → ${(input.amountCents / 100).toFixed(2)} — ${input.reason.trim()}`;
+    await tx.update(salePayments).set({ amountCents: input.amountCents }).where(eq(salePayments.id, input.paymentId));
+    await tx
+      .update(sales)
+      .set({ notes: sale.notes ? `${sale.notes}\n${note}` : note, updatedAt: new Date() })
+      .where(eq(sales.id, sale.id));
+    await recalcSalePaymentStatus(tx, sale.id);
+
+    const [updated] = await tx.select().from(sales).where(eq(sales.id, sale.id)).limit(1);
+    return { ok: true as const, sale: updated };
+  });
+}
+
 /** Corrects occurredAt's calendar day only — the time-of-day already on the
  * row (set at checkout, or copied from the job's completedAt for a
  * job-linked sale) is kept as-is, so this can't reorder same-day sales

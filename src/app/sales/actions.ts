@@ -12,10 +12,12 @@ import {
   updateSaleDate,
   updateSaleDiscount,
   updateSaleItemAmount,
+  updateSalePaymentAmount,
   type DiscountType,
   type PaymentMethod,
   type ReturnItemInput,
   type UpdateSaleItemAmountInput,
+  type UpdateSalePaymentAmountInput,
 } from "@/lib/sales";
 import { searchProductsForPicker } from "@/lib/products";
 
@@ -87,6 +89,21 @@ export async function updateSaleDiscountAction(saleId: string, discountType: Dis
 
 export async function updateSaleItemAmountAction(input: UpdateSaleItemAmountInput) {
   const result = await updateSaleItemAmount(input);
+  if (result.ok) {
+    const sale = result.sale;
+    revalidatePath("/sales");
+    revalidatePath(`/sales/${sale.id}`);
+    revalidatePath(`/sales/${sale.id}/receipt`);
+    revalidatePath("/dashboard");
+    revalidatePath("/reports/financial");
+    if (sale.customerId) revalidatePath(`/customers/${sale.customerId}`);
+    if (sale.stringJobId) revalidatePath(`/jobs/${sale.stringJobId}`);
+  }
+  return result;
+}
+
+export async function updateSalePaymentAmountAction(input: UpdateSalePaymentAmountInput) {
+  const result = await updateSalePaymentAmount(input);
   if (result.ok) {
     const sale = result.sale;
     revalidatePath("/sales");

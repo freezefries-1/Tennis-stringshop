@@ -13,6 +13,7 @@ import { EditSaleCustomerButton } from "@/components/sales/edit-sale-customer-bu
 import { EditSaleDiscountButton } from "@/components/sales/edit-sale-discount-button";
 import { ReturnItemPanel } from "@/components/sales/return-item-panel";
 import { EditSaleItemAmountButton } from "@/components/sales/edit-sale-item-amount-button";
+import { EditSalePaymentAmountButton } from "@/components/sales/edit-sale-payment-amount-button";
 import { AddSaleItemButton } from "@/components/sales/add-sale-item-button";
 import { RemoveSaleItemButton } from "@/components/sales/remove-sale-item-button";
 import { SALE_PAYMENT_STATUS_LABEL, SALE_PAYMENT_STATUS_TONE, SALE_STATUS_LABEL, SALE_STATUS_TONE, PAYMENT_METHOD_LABEL } from "@/components/sales/sale-status";
@@ -125,7 +126,10 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
                     <div className="row-t">{PAYMENT_METHOD_LABEL[p.paymentMethod] ?? p.paymentMethod}</div>
                     <div className="row-s num">{formatDate(p.paymentDate)}</div>
                   </div>
-                  <span className="num">{formatCents(p.amountCents)}</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span className="num">{formatCents(p.amountCents)}</span>
+                    {!isReversal ? <EditSalePaymentAmountButton paymentId={p.id} amountCents={p.amountCents} /> : null}
+                  </div>
                 </div>
               ))}
             </div>
