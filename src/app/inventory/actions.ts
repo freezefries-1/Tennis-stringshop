@@ -6,6 +6,7 @@ import {
   updateStringProduct,
   setStringProductArchived,
   deleteStringProduct,
+  deleteStringBatch,
   findDuplicateStringProduct,
   listStringProducts,
   listSuppliers,
@@ -118,6 +119,20 @@ export async function recordManualAdjustmentAction(input: ManualAdjustmentInput,
   revalidatePath("/dashboard");
   revalidatePath("/reports/inventory");
   return { status: "ok" };
+}
+
+export interface DeleteBatchResult {
+  status: "deleted" | "in_use";
+}
+
+export async function deleteStringBatchAction(batchId: string, productId: string): Promise<DeleteBatchResult> {
+  const result = await deleteStringBatch(batchId);
+  if (result === "in_use") return { status: "in_use" };
+  revalidatePath("/inventory");
+  revalidatePath(`/inventory/products/${productId}`);
+  revalidatePath("/dashboard");
+  revalidatePath("/reports/inventory");
+  return { status: "deleted" };
 }
 
 export async function updateBatchCostAction(input: UpdateBatchCostInput, productId: string) {

@@ -9,6 +9,7 @@ import { formatCents, formatDate } from "@/lib/format";
 import { AdjustStockPanel } from "@/components/inventory/adjust-stock-panel";
 import { ArchiveProductButton } from "@/components/inventory/archive-product-button";
 import { DeleteProductButton } from "@/components/inventory/delete-product-button";
+import { DeleteBatchButton } from "@/components/inventory/delete-batch-button";
 
 export const dynamic = "force-dynamic";
 
@@ -133,6 +134,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                   <th className="num">Purchase cost</th>
                   <th className="num">Cost per {unit === "set" ? "set" : "m"}</th>
                   <th>Status</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -158,6 +160,9 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                       <Badge tone={BATCH_STATUS_TONE[b.status]} dot>
                         {b.status.charAt(0).toUpperCase() + b.status.slice(1)}
                       </Badge>
+                    </td>
+                    <td>
+                      <DeleteBatchButton batchId={b.id} productId={id} />
                     </td>
                   </tr>
                 ))}

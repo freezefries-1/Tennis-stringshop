@@ -151,6 +151,33 @@ export async function deleteStringProduct(id: string): Promise<"deleted" | "in_u
   });
 }
 
+/** True, permanent deletion of a single batch — the same "mistaken entry"
+ * scope as deleteStringProduct above (e.g. a batch received twice by
+ * accident), just for one batch instead of a whole product's worth.
+ * remainingQuantity still equalling originalQuantity is both the check and
+ * the proof: nothing has ever been drawn from this batch, so neither
+ * string_job_inventory_allocations nor sale_item_string_allocations (both
+ * written only when a batch is actually drawn down) can reference it —
+ * same reasoning deleteStringProduct relies on, just at one batch's scope.
+ * The moment any real activity exists, this refuses and Edit batch (correct
+ * quantity/cost) is the everyday path instead. */
+export async function deleteStringBatch(batchId: string): Promise<"deleted" | "in_use"> {
+  return db.transaction(async (tx) => {
+    const [batch] = await tx.select().from(stringInventoryBatches).where(eq(stringInventoryBatches.id, batchId)).for("update");
+    if (!batch) return "in_use";
+    if (Number(batch.originalQuantity) !== Number(batch.remainingQuantity)) return "in_use";
+
+    try {
+      await tx.delete(stringInventoryMovements).where(eq(stringInventoryMovements.batchId, batchId));
+      await tx.delete(stringInventoryBatches).where(eq(stringInventoryBatches.id, batchId));
+      return "deleted";
+    } catch (err) {
+      if (isForeignKeyViolation(err)) return "in_use";
+      throw err;
+    }
+  });
+}
+
 export interface StockSummary {
   available: string; // remaining quantity, this product's trackingUnit
   activeBatches: number;
