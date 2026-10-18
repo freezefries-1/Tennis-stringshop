@@ -189,8 +189,16 @@ export type UpdateJobResult =
  * allocate", never a silent overwrite of the deducted amount. Roles whose
  * inventory-relevant fields are unchanged (or that were never allocated in
  * the first place) are left untouched — editing a job's notes/dates/knots
- * never touches inventory. */
-export async function updateJob(id: string, input: JobInput, opts?: { allowStockOverride?: boolean }): Promise<UpdateJobResult> {
+ * never touches inventory.
+ *
+ * opts.allowPaidSaleEdit is the explicit "Save anyway" override for a
+ * string correction on a job whose linked Sale already has a payment —
+ * see resyncJobSale's own comment in sales.ts for why bypassing that lock
+ * on confirmation is safe (paymentStatus always gets recalculated against
+ * the corrected total) and why it exists: fixing a genuine stringing
+ * mistake shouldn't require refunding the whole Sale and starting a new
+ * job just because a payment was already recorded. */
+export async function updateJob(id: string, input: JobInput, opts?: { allowStockOverride?: boolean; allowPaidSaleEdit?: boolean }): Promise<UpdateJobResult> {
   const [existingJob] = await db.select().from(stringJobs).where(eq(stringJobs.id, id)).limit(1);
   if (!existingJob) return { ok: false, reason: "not_found" };
 
@@ -299,7 +307,7 @@ export async function updateJob(id: string, input: JobInput, opts?: { allowStock
       if (row.saleId && pricingChanged) {
         const currentAllocations = await tx.select().from(stringJobInventoryAllocations).where(and(eq(stringJobInventoryAllocations.stringJobId, id), isNull(stringJobInventoryAllocations.reversedAt)));
         const stringCogsCents = currentAllocations.reduce((sum, a) => sum + a.cogsAmountCents, 0);
-        await resyncJobSale(tx, row.saleId, serviceValues(id, input.services), input.discountCents, stringCogsCents);
+        await resyncJobSale(tx, row.saleId, serviceValues(id, input.services), input.discountCents, stringCogsCents, { allowLocked: opts?.allowPaidSaleEdit });
       }
 
       return row;

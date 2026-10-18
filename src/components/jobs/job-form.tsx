@@ -159,6 +159,10 @@ export function JobForm({
   // Confirmed via the insufficient-stock warning's "Save anyway" button —
   // see the effect below for why this can't just be a submit-button click.
   const [stockOverride, setStockOverride] = useState(false);
+  // Same shape as stockOverride, for the sale_locked "Save anyway" warning
+  // below — confirms a string correction on a job whose linked Sale already
+  // has a payment recorded (see updateJob's own comment in jobs.ts).
+  const [paidSaleOverride, setPaidSaleOverride] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
   const pendingOverrideSubmit = useRef(false);
 
@@ -191,11 +195,11 @@ export function JobForm({
   // commits a state update, so clicking "Save anyway" straight away would
   // still send the stale (unconfirmed) value.
   useEffect(() => {
-    if (pendingOverrideSubmit.current && stockOverride) {
+    if (pendingOverrideSubmit.current && (stockOverride || paidSaleOverride)) {
       pendingOverrideSubmit.current = false;
       formRef.current?.requestSubmit();
     }
-  }, [stockOverride]);
+  }, [stockOverride, paidSaleOverride]);
 
   const subtotalCents = useMemo(() => values.services.reduce((sum, s) => sum + lineTotalCents(s), 0), [values.services]);
   const discountCents = Math.round((Number.parseFloat(values.discount) || 0) * 100);
@@ -234,6 +238,7 @@ export function JobForm({
       <input type="hidden" name="stringingNotes" value={values.stringingNotes} />
       <input type="hidden" name="machineId" value={values.machineId} />
       <input type="hidden" name="allowStockOverride" value={String(stockOverride)} />
+      <input type="hidden" name="allowPaidSaleEdit" value={String(paidSaleOverride)} />
       <input type="hidden" name="main.customerSupplied" value={String(values.main.customerSupplied)} />
       <input type="hidden" name="main.stringProductId" value={values.main.stringProductId} />
       <input type="hidden" name="main.brand" value={values.main.brand} />
@@ -299,6 +304,22 @@ export function JobForm({
               }}
             >
               Save anyway (uses more stock than recorded)
+            </Button>
+          </div>
+        ) : null}
+        {state.status === "sale_locked" ? (
+          <div className="form-warning">
+            <p>{state.message}</p>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                pendingOverrideSubmit.current = true;
+                setPaidSaleOverride(true);
+              }}
+            >
+              Save anyway (updates {state.saleCode}&rsquo;s price)
             </Button>
           </div>
         ) : null}

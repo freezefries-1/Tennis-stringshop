@@ -219,13 +219,19 @@ export async function updateJobAction(jobId: string, prevState: JobFormState, fo
   if (error) return { status: "error", message: error, values };
 
   const allowStockOverride = formData.get("allowStockOverride") === "true";
-  const result = await updateJob(jobId, toInput(values), { allowStockOverride });
+  const allowPaidSaleEdit = formData.get("allowPaidSaleEdit") === "true";
+  const result = await updateJob(jobId, toInput(values), { allowStockOverride, allowPaidSaleEdit });
   if (!result.ok) {
     if (result.reason === "insufficient_stock") {
       return { status: "insufficient_stock", message: "Not enough stock for the updated string usage.", shortages: result.shortages, values };
     }
     if (result.reason === "sale_locked") {
-      return { status: "error", message: `This job's linked sale (${result.saleCode}) already has a payment recorded, so its price/services can't be silently changed. Use the sale's own return/refund workflow for a correction.`, values };
+      return {
+        status: "sale_locked",
+        message: `This job's linked sale (${result.saleCode}) already has a payment recorded — saving will update its price and string cost to match, and recalculate its payment status against the new total.`,
+        saleCode: result.saleCode,
+        values,
+      };
     }
     return { status: "error", message: "This job no longer exists.", values };
   }

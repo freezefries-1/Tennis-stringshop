@@ -770,11 +770,20 @@ export class SaleLockedError extends Error {
  * retail product separately attached via addProductToJobSale below is left
  * alone. The row lock (`for("update")`) closes the gap between checking
  * paymentStatus and acting on it — a payment recorded by a concurrent
- * request can't sneak in between the check and the resync. */
-export async function resyncJobSale(tx: DbOrTx, saleId: string, services: JobServiceLine[], discountCents: number, stringCogsCents: number): Promise<void> {
+ * request can't sneak in between the check and the resync.
+ *
+ * `allowLocked` is the explicit, confirmed exception to the "never silently
+ * rewritten" rule — the same "Save anyway" shape as updateJob's own
+ * allowStockOverride, not a loophole around it: paymentStatus is always
+ * recalculated against the new total afterwards (recalcSalePaymentStatus
+ * below), so a corrected string that changes the price correctly flips a
+ * fully-paid Sale to "Partially paid" with the right balance due, rather
+ * than silently drifting out of sync — fixing a genuine stringing mistake
+ * no longer requires refunding the whole Sale and starting a new job. */
+export async function resyncJobSale(tx: DbOrTx, saleId: string, services: JobServiceLine[], discountCents: number, stringCogsCents: number, opts?: { allowLocked?: boolean }): Promise<void> {
   const [sale] = await tx.select().from(sales).where(eq(sales.id, saleId)).for("update");
   if (!sale) return; // sale was deleted somehow — nothing to sync, don't block the job edit
-  if (sale.paymentStatus !== "unpaid") throw new SaleLockedError(sale.code);
+  if (sale.paymentStatus !== "unpaid" && !opts?.allowLocked) throw new SaleLockedError(sale.code);
 
   const productLines = await tx.select().from(saleItems).where(and(eq(saleItems.saleId, saleId), eq(saleItems.itemType, "product")));
   const productTotalCents = productLines.reduce((sum, l) => sum + l.lineTotalCents, 0);

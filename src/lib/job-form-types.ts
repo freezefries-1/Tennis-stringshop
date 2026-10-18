@@ -62,9 +62,13 @@ export interface JobFormValues {
 }
 
 export interface JobFormState {
-  status: "idle" | "error" | "insufficient_stock";
+  status: "idle" | "error" | "insufficient_stock" | "sale_locked";
   message?: string;
   shortages?: StockShortageView[];
+  /** Set when status is "sale_locked" — the linked Sale's own code, shown
+   * in the "Save anyway" prompt so the stringer can see exactly which
+   * sale's price/COGS is about to change. */
+  saleCode?: string;
   values: JobFormValues;
 }
 
