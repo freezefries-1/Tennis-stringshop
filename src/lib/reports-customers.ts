@@ -11,7 +11,7 @@
 // customer's first activity is trivially "in" an unbounded period, so both
 // figures are reported as null rather than a number that means nothing.
 
-import { and, gte, inArray, isNull, lt, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { customers, sales, stringJobs } from "@/db/schema";
 import type { FinancialsFilters } from "./financials";
@@ -24,6 +24,11 @@ export interface CustomerAnalyticsSummary {
   returningCustomers: number | null;
   customersWithPurchases: number;
   customersWithStringJobs: number;
+  /** Union of customersWithPurchases/customersWithStringJobs for the
+   * selected period — the Dashboard's "Active" customer-insights pill. Not
+   * the sum of those two counts (a customer with both a sale and a job in
+   * the period would double-count). */
+  activeCustomers: number;
   avgCustomerSpendCents: number | null;
   avgTransactionsPerCustomer: number | null;
 }
@@ -93,9 +98,48 @@ export async function getCustomerAnalyticsSummary(filters: FinancialsFilters): P
     returningCustomers,
     customersWithPurchases: purchaserIds.size,
     customersWithStringJobs: jobCustomerIds.size,
+    activeCustomers: activeInPeriod.size,
     avgCustomerSpendCents: purchaserIds.size > 0 ? Math.round(totalSpendCents / purchaserIds.size) : null,
     avgTransactionsPerCustomer: purchaserIds.size > 0 ? totalTransactions / purchaserIds.size : null,
   };
+}
+
+export interface TopCustomerRow {
+  customerId: string;
+  code: string;
+  name: string;
+  totalSalesCents: number;
+  numberOfSales: number;
+}
+
+/** Top-N customers by sales revenue in the selected period, for the
+ * Dashboard's "Top customers" card. Deliberately NOT listCustomerPerformance
+ * below (used by Reports → Customers) — that function runs 5 queries per
+ * call (it also computes lastPurchase/lastStringJob, which this widget
+ * doesn't show) to rank every customer with any activity; the Dashboard
+ * only needs the top few by revenue, so this is ONE query with its own
+ * ORDER BY/LIMIT. */
+export async function getTopCustomers(filters: FinancialsFilters, limit = 5): Promise<TopCustomerRow[]> {
+  const saleDateConds = [sql`${sales.status} != 'cancelled'`, sql`${sales.customerId} is not null`];
+  if (filters.dateFrom) saleDateConds.push(gte(sales.occurredAt, filters.dateFrom));
+  if (filters.dateTo) saleDateConds.push(lt(sales.occurredAt, filters.dateTo));
+
+  const rows = await db
+    .select({
+      customerId: sales.customerId,
+      code: customers.code,
+      name: customers.name,
+      total: sql<string>`sum(${sales.totalCents})`,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(sales)
+    .innerJoin(customers, eq(customers.id, sales.customerId))
+    .where(and(...saleDateConds))
+    .groupBy(sales.customerId, customers.code, customers.name)
+    .orderBy(desc(sql`sum(${sales.totalCents})`))
+    .limit(limit);
+
+  return rows.map((r) => ({ customerId: r.customerId as string, code: r.code, name: r.name, totalSalesCents: Number(r.total), numberOfSales: r.count }));
 }
 
 export interface CustomerPerformanceRow {

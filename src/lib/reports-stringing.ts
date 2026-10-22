@@ -238,6 +238,43 @@ export async function listStringUsage(filters: FinancialsFilters): Promise<Strin
     .filter((r) => r.jobs > 0 || r.revenueCents !== 0 || Number(r.currentStock) > 0);
 }
 
+export interface PopularStringRow {
+  stringProductId: string;
+  brand: string;
+  name: string;
+  gauge: string | null;
+  colour: string | null;
+  jobs: number;
+}
+
+/** Top-N strings by job count in the selected period, for the Dashboard's
+ * "Most popular strings" card. Deliberately NOT listStringUsage above (used
+ * by Reports → Stringing) — that composes 3 queries plus a full revenue/
+ * COGS/current-stock breakdown this widget doesn't show. This is ONE query
+ * with its own ORDER BY/LIMIT. */
+export async function getPopularStrings(filters: FinancialsFilters, limit = 5): Promise<PopularStringRow[]> {
+  const jobConditions = [inArray(stringJobs.status, ["completed", "collected"])];
+  if (filters.dateFrom) jobConditions.push(gte(stringJobs.completedAt, filters.dateFrom));
+  if (filters.dateTo) jobConditions.push(lt(stringJobs.completedAt, filters.dateTo));
+
+  return db
+    .select({
+      stringProductId: stringProducts.id,
+      brand: stringProducts.brand,
+      name: stringProducts.name,
+      gauge: stringProducts.gauge,
+      colour: stringProducts.colour,
+      jobs: sql<number>`count(distinct ${stringJobStrings.stringJobId})::int`,
+    })
+    .from(stringJobStrings)
+    .innerJoin(stringJobs, eq(stringJobs.id, stringJobStrings.stringJobId))
+    .innerJoin(stringProducts, eq(stringProducts.id, stringJobStrings.stringProductId))
+    .where(and(sql`${stringJobStrings.stringProductId} is not null`, ...jobConditions))
+    .groupBy(stringProducts.id, stringProducts.brand, stringProducts.name, stringProducts.gauge, stringProducts.colour)
+    .orderBy(desc(sql`count(distinct ${stringJobStrings.stringJobId})`))
+    .limit(limit);
+}
+
 // -- brand analysis ---------------------------------------------------------
 
 export interface StringBrandRow {

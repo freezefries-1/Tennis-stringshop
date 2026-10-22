@@ -14,9 +14,12 @@ import { DateRangePicker } from "@/components/reports/date-range-picker";
 import { formatMoney0, formatCents, formatCentsSigned, formatDate, formatDateWithWeekday } from "@/lib/format";
 import type { RecentMovementRow } from "@/lib/string-inventory";
 import type { DashboardSalesStats, RecentSaleRow } from "@/lib/sales";
-import type { FinancialSummary, SalesSplit, PeriodComparison } from "@/lib/financials";
+import type { FinancialSummary, SalesSplit, PeriodComparison, MonthlyTrendRow } from "@/lib/financials";
 import type { ExpenseListRow } from "@/lib/expenses";
 import type { ReadyForCollectionRow, RecentJobRow } from "@/lib/jobs";
+import type { TopCustomerRow, CustomerAnalyticsSummary } from "@/lib/reports-customers";
+import type { InventoryValueOverview } from "@/lib/reports-inventory";
+import type { PopularStringRow } from "@/lib/reports-stringing";
 import { JOB_STATUS_LABEL, JOB_STATUS_TONE } from "@/components/jobs/job-status";
 
 function PanelHead({ label, title, action }: { label: string; title?: string; action?: ReactNode }) {
@@ -374,6 +377,176 @@ function RecentExpenses({ expenses }: { expenses: ExpenseListRow[] }) {
   );
 }
 
+function RevenueTrend({ rows }: { rows: MonthlyTrendRow[] }) {
+  const router = useRouter();
+  const max = Math.max(1, ...rows.map((r) => r.netSalesRevenueCents));
+  const peak = rows.reduce((p, r) => (r.netSalesRevenueCents > p.netSalesRevenueCents ? r : p), rows[0]);
+  return (
+    <Card padding="18px">
+      <PanelHead
+        label="Revenue trend"
+        action={
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {peak ? <span className="row-s num">Peak: {formatMoney0(peak.netSalesRevenueCents / 100)}</span> : null}
+            <Button size="sm" variant="ghost" iconRight="arrow-right" onClick={() => router.push("/reports/financial")}>
+              Reports
+            </Button>
+          </div>
+        }
+      />
+      {rows.every((r) => r.netSalesRevenueCents === 0) ? (
+        <div className="row-s">No sales in this period yet.</div>
+      ) : (
+        <div className="bars" style={{ marginTop: 14 }}>
+          {rows.map((r) => (
+            <div className="bar-col" key={`${r.year}-${r.month}`}>
+              <div className="bar-v num">{formatMoney0(r.netSalesRevenueCents / 100)}</div>
+              <div className="bar-track">
+                <div className="bar" style={{ height: `${Math.max(3, (r.netSalesRevenueCents / max) * 100)}%` }} />
+              </div>
+              <div className="bar-x">{r.label.split(" ")[0]}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function TopCustomers({ customers }: { customers: TopCustomerRow[] }) {
+  const router = useRouter();
+  return (
+    <Card padding="20px 0 8px">
+      <div style={{ padding: "0 24px" }}>
+        <PanelHead
+          label="Top customers"
+          action={
+            <Button size="sm" variant="ghost" iconRight="arrow-right" onClick={() => router.push("/reports/customers")}>
+              Reports
+            </Button>
+          }
+        />
+      </div>
+      {customers.length === 0 ? (
+        <div style={{ padding: "0 24px 16px" }} className="row-s">
+          No customer activity in this period.
+        </div>
+      ) : (
+        <div className="rows">
+          {customers.map((c) => (
+            <div className="row" key={c.customerId} onClick={() => router.push(`/customers/${c.customerId}`)} style={{ cursor: "pointer" }}>
+              <div className="row-main">
+                <div className="row-t">{c.name}</div>
+                <div className="row-s num">{c.code}</div>
+              </div>
+              <div className="row-end">
+                <span className="num" style={{ fontSize: 14.5, fontWeight: 500 }}>
+                  {formatCents(c.totalSalesCents)}
+                </span>
+                <span className="row-s num">
+                  {c.numberOfSales} sale{c.numberOfSales === 1 ? "" : "s"}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function CustomerInsights({ summary }: { summary: CustomerAnalyticsSummary }) {
+  return (
+    <Card padding="18px">
+      <div className="lab" style={{ marginBottom: 14 }}>
+        Customer insights
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <Badge tone="brand">New {summary.newCustomers ?? "—"}</Badge>
+        <Badge tone="info">Returning {summary.returningCustomers ?? "—"}</Badge>
+        <Badge tone="success">Active {summary.activeCustomers}</Badge>
+      </div>
+      <SpecList
+        dense
+        items={[
+          { label: "Total customers", value: summary.totalCustomers },
+          { label: "Avg spend / customer", value: summary.avgCustomerSpendCents != null ? <span className="num">{formatCents(summary.avgCustomerSpendCents)}</span> : "—" },
+        ]}
+      />
+    </Card>
+  );
+}
+
+function InventoryValueCard({ overview }: { overview: InventoryValueOverview }) {
+  const router = useRouter();
+  const items: SpecListItem[] = [
+    { label: "String inventory", value: <span className="num">{formatMoney0(overview.stringValueDollars)}</span> },
+    { label: "Retail inventory", value: <span className="num">{formatMoney0(overview.retailValueDollars)}</span> },
+    { label: "String types", value: overview.stringProductCount },
+    { label: "Inventory items", value: overview.retailProductCount },
+    {
+      label: "Low stock items",
+      value: <span style={{ color: overview.totalLowStock + overview.totalOutOfStock > 0 ? "var(--signal-warning)" : undefined }}>{overview.totalLowStock + overview.totalOutOfStock}</span>,
+    },
+  ];
+  return (
+    <Card padding="18px">
+      <PanelHead
+        label="Total inventory value"
+        action={
+          <Button size="sm" variant="ghost" iconRight="arrow-right" onClick={() => router.push("/reports/inventory")}>
+            Reports
+          </Button>
+        }
+      />
+      <div className="ph-t num" style={{ fontSize: 28, marginTop: 10 }}>
+        {formatMoney0(overview.totalValueDollars)}
+      </div>
+      <SpecList dense items={items} />
+    </Card>
+  );
+}
+
+function PopularStrings({ rows }: { rows: PopularStringRow[] }) {
+  const router = useRouter();
+  const max = Math.max(1, ...rows.map((r) => r.jobs));
+  return (
+    <Card padding="20px 0 8px">
+      <div style={{ padding: "0 24px" }}>
+        <PanelHead
+          label="Most popular strings"
+          action={
+            <Button size="sm" variant="ghost" iconRight="arrow-right" onClick={() => router.push("/reports/stringing")}>
+              Reports
+            </Button>
+          }
+        />
+      </div>
+      {rows.length === 0 ? (
+        <div style={{ padding: "0 24px 16px" }} className="row-s">
+          No string jobs yet.
+        </div>
+      ) : (
+        <div style={{ padding: "0 24px 16px" }}>
+          {rows.map((r) => (
+            <div key={r.stringProductId} style={{ marginBottom: 10 }}>
+              <div className="row-s" style={{ display: "flex", justifyContent: "space-between" }}>
+                <span>{[r.brand, r.name, r.gauge ? `${r.gauge}mm` : null, r.colour].filter(Boolean).join(" ")}</span>
+                <span className="num">
+                  {r.jobs} job{r.jobs === 1 ? "" : "s"}
+                </span>
+              </div>
+              <div className="blist-track">
+                <div style={{ width: `${(r.jobs / max) * 100}%`, background: "var(--court-600)" }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 export function Dashboard({
   lowStock,
   recentMovements,
@@ -387,6 +560,11 @@ export function Dashboard({
   readyForCollection,
   recentJobs,
   activeJobCount,
+  topCustomers,
+  customerInsights,
+  inventoryValue,
+  popularStrings,
+  monthlyTrend,
   initialFrom,
   initialTo,
 }: {
@@ -402,6 +580,11 @@ export function Dashboard({
   readyForCollection: ReadyForCollectionRow[];
   recentJobs: RecentJobRow[];
   activeJobCount: number;
+  topCustomers: TopCustomerRow[];
+  customerInsights: CustomerAnalyticsSummary;
+  inventoryValue: InventoryValueOverview;
+  popularStrings: PopularStringRow[];
+  monthlyTrend: MonthlyTrendRow[];
   initialFrom: string;
   initialTo: string;
 }) {
@@ -413,6 +596,9 @@ export function Dashboard({
         <div className="hair" />
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16 }}>
+        <Card>
+          <StatBlock label="Revenue (period)" value={formatMoney0(monthFinancials.netSalesRevenueCents / 100)} icon="banknote" />
+        </Card>
         <Card>
           <StatBlock label="Sales revenue (today)" value={formatMoney0(salesStats.todayRevenueCents / 100)} icon="banknote" />
         </Card>
@@ -451,7 +637,10 @@ export function Dashboard({
         <div className="lab">Charts</div>
         <div className="hair" />
       </div>
-      <div className="g3">
+      <div className="g1">
+        <RevenueTrend rows={monthlyTrend} />
+      </div>
+      <div className="g2">
         <Card padding="18px" style={{ minWidth: 0 }}>
           <div className="lab" style={{ marginBottom: 12 }}>
             Revenue mix
@@ -482,19 +671,6 @@ export function Dashboard({
           <Card interactive padding="18px" style={{ height: "100%", display: "flex", flexDirection: "column", justifyContent: "space-between", minWidth: 0 }}>
             <div>
               <div className="lab" style={{ marginBottom: 8 }}>
-                Revenue &amp; profit trend
-              </div>
-              <div className="row-s">Monthly revenue, gross profit and net profit — see the full 12-month table in Reports.</div>
-            </div>
-            <div className="row-s" style={{ color: "var(--court-600)", display: "flex", alignItems: "center", gap: 4, marginTop: 12 }}>
-              View in Reports <Icon name="arrow-right" size={14} />
-            </div>
-          </Card>
-        </Link>
-        <Link href="/reports/financial" style={{ textDecoration: "none", color: "inherit" }}>
-          <Card interactive padding="18px" style={{ height: "100%", display: "flex", flexDirection: "column", justifyContent: "space-between", minWidth: 0 }}>
-            <div>
-              <div className="lab" style={{ marginBottom: 8 }}>
                 Expenses by category
               </div>
               <div className="row-s">Where operating expenses are going this period — see the full breakdown in Reports.</div>
@@ -519,6 +695,19 @@ export function Dashboard({
             </div>
           </Card>
         </Link>
+      </div>
+
+      <div className="sec-head">
+        <div className="lab">Customers &amp; inventory</div>
+        <div className="hair" />
+      </div>
+      <div className="g2">
+        <TopCustomers customers={topCustomers} />
+        <CustomerInsights summary={customerInsights} />
+      </div>
+      <div className="g2">
+        <InventoryValueCard overview={inventoryValue} />
+        <PopularStrings rows={popularStrings} />
       </div>
 
       <div className="sec-head">

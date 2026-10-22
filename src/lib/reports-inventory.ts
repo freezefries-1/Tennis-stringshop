@@ -42,6 +42,12 @@ export interface InventoryValueOverview {
   stringOutOfStock: number;
   retailLowStock: number;
   retailOutOfStock: number;
+  /** String product / retail product catalogue counts — the Dashboard's
+   * "String types" / "Inventory items" figures. Free: both summaries below
+   * already compute totalProducts, this just surfaces fields that were
+   * already being thrown away. */
+  stringProductCount: number;
+  retailProductCount: number;
 }
 
 export async function getInventoryValueOverview(): Promise<InventoryValueOverview> {
@@ -56,6 +62,8 @@ export async function getInventoryValueOverview(): Promise<InventoryValueOvervie
     stringOutOfStock: stringSummary.outOfStockCount,
     retailLowStock: retailSummary.lowStockCount,
     retailOutOfStock: retailSummary.outOfStockCount,
+    stringProductCount: stringSummary.totalProducts,
+    retailProductCount: retailSummary.totalProducts,
   };
 }
 
