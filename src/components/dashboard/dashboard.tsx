@@ -377,7 +377,7 @@ function RecentExpenses({ expenses }: { expenses: ExpenseListRow[] }) {
   );
 }
 
-function RevenueTrend({ rows }: { rows: MonthlyTrendRow[] }) {
+export function RevenueTrend({ rows }: { rows: MonthlyTrendRow[] }) {
   const router = useRouter();
   const max = Math.max(1, ...rows.map((r) => r.netSalesRevenueCents));
   const peak = rows.reduce((p, r) => (r.netSalesRevenueCents > p.netSalesRevenueCents ? r : p), rows[0]);
@@ -413,7 +413,7 @@ function RevenueTrend({ rows }: { rows: MonthlyTrendRow[] }) {
   );
 }
 
-function TopCustomers({ customers }: { customers: TopCustomerRow[] }) {
+export function TopCustomers({ customers }: { customers: TopCustomerRow[] }) {
   const router = useRouter();
   return (
     <Card padding="20px 0 8px">
@@ -455,7 +455,7 @@ function TopCustomers({ customers }: { customers: TopCustomerRow[] }) {
   );
 }
 
-function CustomerInsights({ summary }: { summary: CustomerAnalyticsSummary }) {
+export function CustomerInsights({ summary }: { summary: CustomerAnalyticsSummary }) {
   return (
     <Card padding="18px">
       <div className="lab" style={{ marginBottom: 14 }}>
@@ -477,7 +477,7 @@ function CustomerInsights({ summary }: { summary: CustomerAnalyticsSummary }) {
   );
 }
 
-function InventoryValueCard({ overview }: { overview: InventoryValueOverview }) {
+export function InventoryValueCard({ overview }: { overview: InventoryValueOverview }) {
   const router = useRouter();
   const items: SpecListItem[] = [
     { label: "String inventory", value: <span className="num">{formatMoney0(overview.stringValueDollars)}</span> },
@@ -507,7 +507,7 @@ function InventoryValueCard({ overview }: { overview: InventoryValueOverview }) 
   );
 }
 
-function PopularStrings({ rows }: { rows: PopularStringRow[] }) {
+export function PopularStrings({ rows }: { rows: PopularStringRow[] }) {
   const router = useRouter();
   const max = Math.max(1, ...rows.map((r) => r.jobs));
   return (
@@ -560,11 +560,8 @@ export function Dashboard({
   readyForCollection,
   recentJobs,
   activeJobCount,
-  topCustomers,
-  customerInsights,
-  inventoryValue,
-  popularStrings,
-  monthlyTrend,
+  revenueTrendSlot,
+  customersInventorySlot,
   initialFrom,
   initialTo,
 }: {
@@ -580,11 +577,11 @@ export function Dashboard({
   readyForCollection: ReadyForCollectionRow[];
   recentJobs: RecentJobRow[];
   activeJobCount: number;
-  topCustomers: TopCustomerRow[];
-  customerInsights: CustomerAnalyticsSummary;
-  inventoryValue: InventoryValueOverview;
-  popularStrings: PopularStringRow[];
-  monthlyTrend: MonthlyTrendRow[];
+  // Streamed in separately (their own async Server Component + Suspense
+  // boundary, wired up in app/dashboard/page.tsx) rather than fetched
+  // alongside everything else above — see that file's comment for why.
+  revenueTrendSlot: ReactNode;
+  customersInventorySlot: ReactNode;
   initialFrom: string;
   initialTo: string;
 }) {
@@ -637,9 +634,7 @@ export function Dashboard({
         <div className="lab">Charts</div>
         <div className="hair" />
       </div>
-      <div className="g1">
-        <RevenueTrend rows={monthlyTrend} />
-      </div>
+      <div className="g1">{revenueTrendSlot}</div>
       <div className="g2">
         <Card padding="18px" style={{ minWidth: 0 }}>
           <div className="lab" style={{ marginBottom: 12 }}>
@@ -701,14 +696,7 @@ export function Dashboard({
         <div className="lab">Customers &amp; inventory</div>
         <div className="hair" />
       </div>
-      <div className="g2">
-        <TopCustomers customers={topCustomers} />
-        <CustomerInsights summary={customerInsights} />
-      </div>
-      <div className="g2">
-        <InventoryValueCard overview={inventoryValue} />
-        <PopularStrings rows={popularStrings} />
-      </div>
+      {customersInventorySlot}
 
       <div className="sec-head">
         <div className="lab">Needs attention</div>

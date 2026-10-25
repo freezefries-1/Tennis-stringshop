@@ -1,14 +1,16 @@
+import { Suspense } from "react";
 import { Dashboard } from "@/components/dashboard/dashboard";
+import { RevenueTrendSection } from "@/components/dashboard/revenue-trend-section";
+import { CustomersInventorySection } from "@/components/dashboard/customers-inventory-section";
+import { SectionSkeleton } from "@/components/dashboard/section-skeleton";
 import { listLowStockProducts as listLowStockStringProducts, listRecentMovements } from "@/lib/string-inventory";
 import { listLowStockProducts as listLowStockRetailProducts } from "@/lib/products";
 import { getDashboardSalesStats, listRecentSales } from "@/lib/sales";
-import { getFinancialSummary, getPeriodComparison, getSalesSplit, getMonthlyTrend, monthRange } from "@/lib/financials";
+import { getFinancialSummary, getPeriodComparison, getSalesSplit, monthRange } from "@/lib/financials";
 import { listRecentExpenses } from "@/lib/expenses";
 import { getInventoryDefaults } from "@/lib/settings";
-import { getStringJobCountForPeriod, getPopularStrings } from "@/lib/reports-stringing";
+import { getStringJobCountForPeriod } from "@/lib/reports-stringing";
 import { getActiveJobCount, listReadyForCollection, listRecentJobsForDashboard } from "@/lib/jobs";
-import { getTopCustomers, getCustomerAnalyticsSummary } from "@/lib/reports-customers";
-import { getInventoryValueOverview } from "@/lib/reports-inventory";
 import { resolveDateParams } from "@/lib/date-filter";
 
 export const dynamic = "force-dynamic";
@@ -40,16 +42,22 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   // Expenses by Category — Phase 8 §7) deliberately link out to /reports
   // instead of duplicating those queries here, per §43: "the Dashboard
   // should NOT wait for every detailed analytics report to calculate."
-  // Top customers / customer insights / inventory value / popular strings /
-  // revenue trend (this block) are new cards the Dashboard redesign added —
-  // each one reuses the cheapest existing function for its figure (see the
-  // comment on each: getTopCustomers/getPopularStrings are dedicated
-  // single-query dashboard variants of their heavier Reports-page
-  // equivalents; getCustomerAnalyticsSummary/getInventoryValueOverview/
-  // getMonthlyTrend are reused as-is, either because the logic they encode
-  // is centralized on purpose (new/returning) or because they were already
-  // cheap enough to share (inventory value, monthly trend).
-  const [lowStockStrings, lowStockRetail, recentMovements, salesStats, recentSales, summary, recentExpenses, salesSplit, stringJobCount, readyForCollection, recentJobs, activeJobCount, topCustomers, customerInsights, inventoryValue, popularStrings, monthlyTrend] = await Promise.all([
+  //
+  // The Dashboard redesign's new cards (Top customers, Customer insights,
+  // Total inventory value, Most popular strings, Revenue trend) broke that
+  // rule the first time around — bolted directly onto THIS Promise.all,
+  // they pushed a single dashboard load from ~25-30 DB round trips to
+  // ~40-50, which started dropping connections in production (the pooler
+  // math above was tuned for the smaller number). Fixed by moving them out
+  // of this request entirely: RevenueTrendSection/CustomersInventorySection
+  // below are their own async Server Components, each wrapped in its own
+  // <Suspense>, so Next streams this page's response as soon as THIS
+  // Promise.all resolves and fetches the new cards' data in separate
+  // requests afterwards — same principle as the existing link-out cards
+  // (don't make the critical path wait on every analytics figure), just
+  // implemented with streaming instead of a link out, since these needed
+  // to render inline.
+  const [lowStockStrings, lowStockRetail, recentMovements, salesStats, recentSales, summary, recentExpenses, salesSplit, stringJobCount, readyForCollection, recentJobs, activeJobCount] = await Promise.all([
     (async () => listLowStockStringProducts(8, await defaultsPromise))(),
     (async () => listLowStockRetailProducts(8, await defaultsPromise))(),
     listRecentMovements(),
@@ -62,11 +70,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     listReadyForCollection(5),
     listRecentJobsForDashboard(5),
     getActiveJobCount(),
-    getTopCustomers(filters, 5),
-    getCustomerAnalyticsSummary(filters),
-    getInventoryValueOverview(),
-    getPopularStrings(filters, 5),
-    getMonthlyTrend(6),
   ]);
 
   const comparison = await getPeriodComparison(filters, summary);
@@ -90,11 +93,16 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       readyForCollection={readyForCollection}
       recentJobs={recentJobs}
       activeJobCount={activeJobCount}
-      topCustomers={topCustomers}
-      customerInsights={customerInsights}
-      inventoryValue={inventoryValue}
-      popularStrings={popularStrings}
-      monthlyTrend={monthlyTrend}
+      revenueTrendSlot={
+        <Suspense fallback={<SectionSkeleton label="Revenue trend" height={262} />}>
+          <RevenueTrendSection />
+        </Suspense>
+      }
+      customersInventorySlot={
+        <Suspense fallback={<SectionSkeleton label="Customers & inventory" height={420} />}>
+          <CustomersInventorySection filters={filters} />
+        </Suspense>
+      }
       initialFrom={dateFrom ? dateFrom.toISOString() : ""}
       initialTo={dateTo ? dateTo.toISOString() : ""}
     />
