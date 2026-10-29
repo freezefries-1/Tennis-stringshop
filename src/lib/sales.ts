@@ -285,7 +285,14 @@ async function recalcSalePaymentStatus(tx: DbOrTx, saleId: string): Promise<Sale
   if (sale.status === "cancelled") return sale.paymentStatus;
   const [{ paid }] = await tx.select({ paid: sql<string>`coalesce(sum(${salePayments.amountCents}), 0)` }).from(salePayments).where(eq(salePayments.saleId, saleId));
   const paidCents = Number(paid);
-  const status: SalePaymentStatus = paidCents <= 0 ? "unpaid" : paidCents >= sale.totalCents ? "paid" : "partially_paid";
+  // totalCents <= 0 (a complimentary job/sale, or one discounted to zero)
+  // is trivially settled — nothing is owed, so it's "paid" regardless of
+  // paidCents, never "unpaid". Checked before the paidCents <= 0 branch
+  // below, which would otherwise catch a $0/$0 sale first and mislabel it
+  // — the exact mismatch that let a job's Linked Sale panel show "Unpaid"
+  // right next to "Paid in full" (that second badge comes from
+  // TakePaymentForm's own, correct balanceDueCents <= 0 check).
+  const status: SalePaymentStatus = sale.totalCents <= 0 ? "paid" : paidCents <= 0 ? "unpaid" : paidCents >= sale.totalCents ? "paid" : "partially_paid";
   await tx.update(sales).set({ paymentStatus: status, updatedAt: new Date() }).where(eq(sales.id, saleId));
   return status;
 }
